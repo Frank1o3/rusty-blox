@@ -1,0 +1,3 @@
+[submodule "runtime"]
+    path = runtime
+    url = "https://github.com/Frank1o3/roblox-runtime"
