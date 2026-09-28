@@ -15,6 +15,10 @@ The current binary accepts a base APK path or looks for Sober's x86-64
 `base.apk` and `split_config.x86_64.apk`, then copies them and extracts
 `lib/x86_64/*.so` from the APK set into
 `$XDG_DATA_HOME/rusty-blox/roblox` (or `~/.local/share/rusty-blox/roblox`).
+Unchanged APK source files are reused on later starts.
 The client then builds and validates a `RuntimeConfig` with its managed paths
-and asks the runtime to prepare its Android filesystem view. Window creation,
-game startup, surface handoff and event forwarding are not implemented yet.
+and asks the runtime to prepare its Android filesystem view and extract its
+APK assets into the managed cache. It also inspects the engine ELF and reports
+required and optional import counts, resolves imports and maps `libroblox.so`
+with its constructors deferred. Window creation, constructor execution, Roblox
+GameActivity bootstrap, surface handoff and event forwarding are not implemented yet.

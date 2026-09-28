@@ -42,6 +42,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         options: roblox_runtime::RuntimeOptions::default(),
     };
     let system_dir = runtime_config.prepare_android_environment()?;
+    let asset_dir = runtime_config.prepare_asset_tree()?;
+    let imports = runtime_config.engine_imports()?;
+    let engine = runtime_config.load_engine()?;
+    let strong_imports = imports
+        .values()
+        .filter(|binding: &&roblox_runtime::ImportBinding| {
+            **binding == roblox_runtime::ImportBinding::Strong
+        })
+        .count();
 
     for apk in &runtime_config.apk_paths {
         println!("APK: {}", apk.display());
@@ -51,5 +60,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         runtime_config.native_lib_dir.display()
     );
     println!("Android system files: {}", system_dir.display());
+    println!("APK assets: {}", asset_dir.display());
+    println!(
+        "Engine imports: {} required, {} optional",
+        strong_imports,
+        imports.len() - strong_imports
+    );
+    let (code_base, code_size) = engine.code_region();
+    println!(
+        "Engine mapped (constructors deferred): base=0x{:x}, executable={code_size} bytes at 0x{code_base:x}",
+        engine.base()
+    );
     Ok(())
 }

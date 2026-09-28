@@ -54,6 +54,19 @@ pub fn import_apks(sources: &[PathBuf], managed_dir: &Path) -> Result<ImportedCl
         }
     }
 
+    let stamp = source_stamp(sources)?;
+    if fs::read_to_string(managed_dir.join(".rusty-blox-source-stamp"))
+        .is_ok_and(|existing| existing == stamp)
+        && sources.iter().all(|source| {
+            source
+                .file_name()
+                .is_some_and(|name| managed_dir.join(name).is_file())
+        })
+        && managed_dir.join("lib/x86_64/libroblox.so").is_file()
+    {
+        return imported_paths(sources, managed_dir);
+    }
+
     let parent = managed_dir
         .parent()
         .ok_or_else(|| ImportError::InvalidManagedPath(managed_dir.to_path_buf()))?;
@@ -65,13 +78,17 @@ pub fn import_apks(sources: &[PathBuf], managed_dir: &Path) -> Result<ImportedCl
     }
     fs::create_dir(&staging)?;
 
-    let result = import_to_staging(sources, &staging);
+    let result = import_to_staging(sources, &staging, &stamp);
     if let Err(error) = result {
         let _ = fs::remove_dir_all(&staging);
         return Err(error);
     }
 
     publish(&staging, managed_dir)?;
+    imported_paths(sources, managed_dir)
+}
+
+fn imported_paths(sources: &[PathBuf], managed_dir: &Path) -> Result<ImportedClient, ImportError> {
     Ok(ImportedClient {
         apk_paths: sources
             .iter()
@@ -86,7 +103,28 @@ pub fn import_apks(sources: &[PathBuf], managed_dir: &Path) -> Result<ImportedCl
     })
 }
 
-fn import_to_staging(sources: &[PathBuf], staging: &Path) -> Result<(), ImportError> {
+fn source_stamp(sources: &[PathBuf]) -> Result<String, ImportError> {
+    use std::os::unix::fs::MetadataExt;
+
+    let mut stamp = String::new();
+    for source in sources {
+        let metadata = fs::metadata(source)?;
+        stamp.push_str(&format!(
+            "{:?}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            source,
+            metadata.dev(),
+            metadata.ino(),
+            metadata.size(),
+            metadata.mtime(),
+            metadata.mtime_nsec(),
+            metadata.ctime(),
+            metadata.ctime_nsec()
+        ));
+    }
+    Ok(stamp)
+}
+
+fn import_to_staging(sources: &[PathBuf], staging: &Path, stamp: &str) -> Result<(), ImportError> {
     let native_dir = staging.join("lib/x86_64");
     fs::create_dir_all(&native_dir)?;
 
@@ -118,6 +156,7 @@ fn import_to_staging(sources: &[PathBuf], staging: &Path) -> Result<(), ImportEr
     if !found_roblox {
         return Err(ImportError::RobloxLibraryMissing);
     }
+    fs::write(staging.join(".rusty-blox-source-stamp"), stamp)?;
     Ok(())
 }
 
