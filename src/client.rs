@@ -12,16 +12,24 @@ const SOBER_APK_RELATIVE: &str =
 /// Runtime inputs imported into the client's managed data directory.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ImportedClient {
-    pub apk: PathBuf,
+    pub apk_paths: Vec<PathBuf>,
     pub native_lib_dir: PathBuf,
 }
 
-/// Find the x86-64 APK managed by the Sober Flatpak for the current user.
-pub fn discover_sober_apk() -> Option<PathBuf> {
-    let path = env::var_os("HOME")
+/// Find Sober's base APK and x86-64 split APK for the current user.
+pub fn discover_sober_apks() -> Option<Vec<PathBuf>> {
+    let base = env::var_os("HOME")
         .map(PathBuf::from)?
         .join(SOBER_APK_RELATIVE);
-    path.is_file().then_some(path)
+    if !base.is_file() {
+        return None;
+    }
+    let mut apks = vec![base.clone()];
+    let split = base.with_file_name("split_config.x86_64.apk");
+    if split.is_file() {
+        apks.push(split);
+    }
+    Some(apks)
 }
 
 /// Choose the client's persistent installation directory.
@@ -36,9 +44,14 @@ pub fn managed_install_dir() -> Option<PathBuf> {
 ///
 /// The import is assembled in a sibling staging directory and only published
 /// after the APK and `libroblox.so` have both been written successfully.
-pub fn import_apk(source: &Path, managed_dir: &Path) -> Result<ImportedClient, ImportError> {
-    if !source.is_file() {
-        return Err(ImportError::MissingApk(source.to_path_buf()));
+pub fn import_apks(sources: &[PathBuf], managed_dir: &Path) -> Result<ImportedClient, ImportError> {
+    if sources.is_empty() {
+        return Err(ImportError::NoApks);
+    }
+    for source in sources {
+        if !source.is_file() {
+            return Err(ImportError::MissingApk(source.to_path_buf()));
+        }
     }
 
     let parent = managed_dir
@@ -52,7 +65,7 @@ pub fn import_apk(source: &Path, managed_dir: &Path) -> Result<ImportedClient, I
     }
     fs::create_dir(&staging)?;
 
-    let result = import_to_staging(source, &staging);
+    let result = import_to_staging(sources, &staging);
     if let Err(error) = result {
         let _ = fs::remove_dir_all(&staging);
         return Err(error);
@@ -60,32 +73,46 @@ pub fn import_apk(source: &Path, managed_dir: &Path) -> Result<ImportedClient, I
 
     publish(&staging, managed_dir)?;
     Ok(ImportedClient {
-        apk: managed_dir.join("base.apk"),
+        apk_paths: sources
+            .iter()
+            .map(|source| {
+                source
+                    .file_name()
+                    .map(|name| managed_dir.join(name))
+                    .ok_or_else(|| ImportError::MissingApk(source.clone()))
+            })
+            .collect::<Result<_, _>>()?,
         native_lib_dir: managed_dir.join("lib/x86_64"),
     })
 }
 
-fn import_to_staging(source: &Path, staging: &Path) -> Result<(), ImportError> {
-    fs::copy(source, staging.join("base.apk"))?;
-    let apk = File::open(source)?;
-    let mut archive = zip::ZipArchive::new(apk)?;
+fn import_to_staging(sources: &[PathBuf], staging: &Path) -> Result<(), ImportError> {
     let native_dir = staging.join("lib/x86_64");
     fs::create_dir_all(&native_dir)?;
 
     let mut found_roblox = false;
-    for index in 0..archive.len() {
-        let mut entry = archive.by_index(index)?;
-        let Some(name) = entry.enclosed_name() else {
-            continue;
-        };
-        let Some(file_name) = native_library_name(&name) else {
-            continue;
-        };
+    for source in sources {
+        let apk_name = source
+            .file_name()
+            .ok_or_else(|| ImportError::MissingApk(source.clone()))?;
+        fs::copy(source, staging.join(apk_name))?;
 
-        let destination = native_dir.join(file_name);
-        let mut output = File::create(destination)?;
-        io::copy(&mut entry, &mut output)?;
-        found_roblox |= file_name == "libroblox.so";
+        let apk = File::open(source)?;
+        let mut archive = zip::ZipArchive::new(apk)?;
+        for index in 0..archive.len() {
+            let mut entry = archive.by_index(index)?;
+            let Some(name) = entry.enclosed_name() else {
+                continue;
+            };
+            let Some(file_name) = native_library_name(&name) else {
+                continue;
+            };
+
+            let destination = native_dir.join(file_name);
+            let mut output = File::create(destination)?;
+            io::copy(&mut entry, &mut output)?;
+            found_roblox |= file_name == "libroblox.so";
+        }
     }
 
     if !found_roblox {
@@ -146,6 +173,7 @@ pub enum ImportError {
     Zip(zip::result::ZipError),
     MissingApk(PathBuf),
     InvalidManagedPath(PathBuf),
+    NoApks,
     RobloxLibraryMissing,
 }
 
@@ -162,6 +190,7 @@ impl fmt::Display for ImportError {
                     path.display()
                 )
             }
+            Self::NoApks => f.write_str("no APKs were supplied for import"),
             Self::RobloxLibraryMissing => {
                 f.write_str("APK does not contain lib/x86_64/libroblox.so")
             }
