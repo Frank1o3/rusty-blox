@@ -16,9 +16,13 @@ The current binary accepts a base APK path or looks for Sober's x86-64
 `lib/x86_64/*.so` from the APK set into
 `$XDG_DATA_HOME/rusty-blox/roblox` (or `~/.local/share/rusty-blox/roblox`).
 Unchanged APK source files are reused on later starts.
-The client then builds and validates a `RuntimeConfig` with its managed paths
-and asks the runtime to prepare its Android filesystem view and extract its
-APK assets into the managed cache. It also inspects the engine ELF and reports
-required and optional import counts, resolves imports and maps `libroblox.so`
-with its constructors deferred. Window creation, constructor execution, Roblox
-GameActivity bootstrap, surface handoff and event forwarding are not implemented yet.
+The client builds a `RuntimeConfig` from those managed APK, library, data and
+cache paths, prepares Android filesystem and asset views, then creates a winit
+window on X11 or Wayland. For Wayland it owns a `wl_egl_window` for as long as
+the runtime surface is installed. It asks the runtime to map the engine, run
+its deferred constructors, initialise JNI and GameActivity, perform the
+app-bridge startup calls, and deliver the first surface. Resize events update
+both the host EGL window and Roblox's surface callbacks. The current runtime
+still has no render context or event pump, and keyboard/mouse forwarding is
+pending, so reaching GameActivity startup does not establish that a playable
+game appears.
