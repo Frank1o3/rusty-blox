@@ -25,10 +25,31 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("no APK argument and no Sober x86-64 APK was found")?;
     let managed_dir = client::managed_install_dir().ok_or("HOME and XDG_DATA_HOME are unset")?;
     let imported = client::import_apks(&apks, &managed_dir)?;
+    let client_root = managed_dir
+        .parent()
+        .ok_or("managed installation directory has no parent")?;
+    let data_dir = client_root.join("data");
+    let cache_dir = client_root.join("cache");
+    std::fs::create_dir_all(&data_dir)?;
+    std::fs::create_dir_all(&cache_dir)?;
 
-    for apk in &imported.apk_paths {
+    let runtime_config = roblox_runtime::RuntimeConfig {
+        apk_paths: imported.apk_paths.clone(),
+        native_lib_dir: imported.native_lib_dir.clone(),
+        data_dir,
+        cache_dir,
+        fast_flags: Default::default(),
+        options: roblox_runtime::RuntimeOptions::default(),
+    };
+    let system_dir = runtime_config.prepare_android_environment()?;
+
+    for apk in &runtime_config.apk_paths {
         println!("APK: {}", apk.display());
     }
-    println!("Native libraries: {}", imported.native_lib_dir.display());
+    println!(
+        "Native libraries: {}",
+        runtime_config.native_lib_dir.display()
+    );
+    println!("Android system files: {}", system_dir.display());
     Ok(())
 }

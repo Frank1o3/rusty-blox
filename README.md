@@ -15,5 +15,6 @@ The current binary accepts a base APK path or looks for Sober's x86-64
 `base.apk` and `split_config.x86_64.apk`, then copies them and extracts
 `lib/x86_64/*.so` from the APK set into
 `$XDG_DATA_HOME/rusty-blox/roblox` (or `~/.local/share/rusty-blox/roblox`).
-Window creation, runtime startup, surface handoff and event forwarding are not
-implemented yet.
+The client then builds and validates a `RuntimeConfig` with its managed paths
+and asks the runtime to prepare its Android filesystem view. Window creation,
+game startup, surface handoff and event forwarding are not implemented yet.

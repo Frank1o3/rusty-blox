@@ -4,4 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+roblox-runtime = { path = "../roblox-runtime" }
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
