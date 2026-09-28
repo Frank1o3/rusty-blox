@@ -1125,6 +1125,7 @@ version = "0.1.0"
 dependencies = [
  "libloading 0.9.0",
  "roblox-runtime",
+ "serde_json",
  "winit",
  "zip 8.6.0",
 ]
