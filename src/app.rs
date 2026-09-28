@@ -195,7 +195,12 @@ impl winit::application::ApplicationHandler for ClientApp {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        event_loop.set_control_flow(ControlFlow::Wait);
+        if self.game_activity.is_some() {
+            let _ = roblox_runtime::android::looper::poll_for_current_thread(0);
+        }
+        event_loop.set_control_flow(ControlFlow::WaitUntil(
+            std::time::Instant::now() + std::time::Duration::from_millis(16),
+        ));
     }
 }
 
