@@ -79,8 +79,20 @@ impl ClientApp {
             .map_err(|error| format!("initialize engine JNI: {error}"))?;
         println!("JNI_OnLoad returned 0x{jni_version:x}");
 
+        let settings = match &config.options.client_settings {
+            Some(path) => std::fs::read_to_string(path)
+                .map_err(|error| format!("read client settings {}: {error}", path.display()))?,
+            None => "{}".to_owned(),
+        };
+        engine
+            .install_startup_bootstrap(settings, config.fast_flags.to_string())
+            .map_err(|error| format!("install GameActivity bootstrap: {error}"))?;
+
         let internal = crate::startup::config_path(&config, "files");
         let external = crate::startup::config_path(&config, "external");
+        if !roblox_runtime::android::looper::prepare_for_current_thread() {
+            return Err("prepare Android looper for the GameActivity thread failed".into());
+        }
         let game_activity = engine
             .initialize_game_activity(&internal, &internal, &external)
             .map_err(|error| format!("initialize GameActivity: {error}"))?;

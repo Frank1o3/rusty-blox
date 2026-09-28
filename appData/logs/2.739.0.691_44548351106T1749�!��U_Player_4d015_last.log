@@ -1,0 +1,20 @@
+[FLog::Output] All use of Roblox services must comply with Roblox's Terms of Use, Privacy Policy, Community Standards, and applicable laws. Processing of User personal information is limited to the purposes expressly permitted therein.
+1970-01-01T00:00:06.411Z,6.411547,22d1ca40,6,Info [FLog::JNIAppBridge] nativeAppBridgeV2Init:
+1970-01-01T00:00:06.430Z,6.430976,d51a96c0,6 [FLog::SingleSurfaceApp] initializeWithAppStarter
+1970-01-01T00:00:06.431Z,6.431129,d51a96c0,6 [FLog::SingleSurfaceApp] initializeSingleton
+1970-01-01T00:00:06.432Z,6.432534,d51a96c0,6 [FLog::Output] setAssetFolder /home/franklin/.local/share/rusty-blox/cache/android-assets
+1970-01-01T00:00:06.477Z,6.477845,d59aa6c0,6,Info [FLog::NativeMain] [android_main] Create a new NativeEngine:
+1970-01-01T00:00:06.483Z,6.483455,d59aa6c0,6,Info [FLog::DataModelBindings] onDataModelNotification: bind DataModel services...
+1970-01-01T00:00:06.488Z,6.488292,d59aa6c0,6,Info [FLog::NativeEngine] initializing.
+1970-01-01T00:00:06.488Z,6.488638,d59aa6c0,6,Info [FLog::NativeEngine] API version 0, Density 1.000.
+1970-01-01T00:00:06.497Z,6.497561,d59aa6c0,6,Info [FLog::NativeDM] initialize: state:1. areFlagsLoaded:false.
+1970-01-01T00:00:06.497Z,6.497757,d59aa6c0,6,Info [FLog::NativeDM] getFlagsFromEngine_:
+1970-01-01T00:00:06.497Z,6.497947,d59aa6c0,6,Info [FLog::NativeDM] bootstrapTheApp_:
+1970-01-01T00:00:06.502Z,6.502314,d51a96c0,6 [FLog::Error] Error: boost::filesystem::canonical: No such file or directory: "/home/franklin/.local/share/rusty-blox/cache/android"
+1970-01-01T00:00:06.502Z,6.502974,d51a96c0,6,Error [DFLog::LoadSettingsZstdDictionary] Platform assets path not set for dictionary loading.
+1970-01-01T00:00:06.503Z,6.503068,d51a96c0,6,Warning [FLog::Output] settingsUrl: https://clientsettingscdn.roblox.com/v2/settings-compressed/application/AndroidApp/67d516a78ef797d4f99059229489371c538ef02a4c8425da431fd578454203cf.dcz
+1970-01-01T00:00:06.508Z,6.508250,22d1ca40,6,Info [FLog::JNIAppBridge] nativeAppBridgeStartLuaAppDM: Calling initializeLuaAppWithLoggedInUser
+1970-01-01T00:00:06.850Z,6.850070,d51a96c0,6,Error [FLog::Error] fetch flag exception: HttpError: Unknown
+1970-01-01T00:00:06.850Z,6.850223,d51a96c0,6,Info [FLog::NativeDM] ... getFlags: success = false.
+1970-01-01T00:00:06.850Z,6.850605,d51a96c0,6 [FLog::SingleSurfaceApp] initializeLuaAppWithLoggedInUser: (stage:None).
+1970-01-01T00:00:06.850Z,6.850686,d51a96c0,6 [FLog::SingleSurfaceApp] applyLocale
