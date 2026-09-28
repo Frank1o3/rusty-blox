@@ -71,13 +71,13 @@ impl ClientApp {
         engine
             .prepare_before_constructors()
             .map_err(|error| format!("prepare engine storage: {error}"))?;
-        engine
-            .run_constructors()
-            .map_err(|error| format!("run engine constructors: {error}"))?;
         let jni_version = engine
             .initialize_jni()
             .map_err(|error| format!("initialize engine JNI: {error}"))?;
         println!("JNI_OnLoad returned 0x{jni_version:x}");
+        engine
+            .run_constructors()
+            .map_err(|error| format!("run engine constructors: {error}"))?;
 
         let internal = crate::startup::config_path(&config, "files");
         let external = crate::startup::config_path(&config, "external");
