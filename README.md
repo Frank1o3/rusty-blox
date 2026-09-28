@@ -11,5 +11,8 @@ with the APK/native-library locations, data and cache paths, configuration and
 a renderable host surface. The runtime does not discover APKs or create the
 client's top-level window.
 
-The current binary is a placeholder; APK import, window creation, surface
-handoff and event forwarding are not implemented yet.
+The current binary accepts an APK path or looks for Sober's x86-64
+`base.apk`, then copies it and extracts `lib/x86_64/*.so` into
+`$XDG_DATA_HOME/rusty-blox/roblox` (or `~/.local/share/rusty-blox/roblox`).
+Window creation, runtime startup, surface handoff and event forwarding are not
+implemented yet.
