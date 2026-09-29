@@ -62,11 +62,29 @@ impl ClientApp {
 
 impl ClientApp {
     fn launch(&mut self, event_loop: &ActiveEventLoop) -> Result<(), String> {
+        // Start at 1280x720 when the display can fit it, scaling down to keep
+        // the window floating and fully visible on smaller screens. The user
+        // can resize it after launch.
+        let base = PhysicalSize::new(1280_u32, 720_u32);
+        let size = event_loop
+            .primary_monitor()
+            .map(|monitor| {
+                let available = monitor.size();
+                let scale = ((available.width.saturating_sub(64) as f64 / base.width as f64)
+                    .min(available.height.saturating_sub(96) as f64 / base.height as f64))
+                .min(1.0);
+                PhysicalSize::new(
+                    (base.width as f64 * scale).round().max(1.0) as u32,
+                    (base.height as f64 * scale).round().max(1.0) as u32,
+                )
+            })
+            .unwrap_or(base);
         let window = event_loop
             .create_window(
                 Window::default_attributes()
-                    .with_title("rusty-blox")
-                    .with_inner_size(PhysicalSize::new(1280, 720)),
+                    .with_title("roblox-runtime")
+                    .with_resizable(true)
+                    .with_inner_size(size),
             )
             .map_err(|error| format!("create host window: {error}"))?;
         window.set_ime_allowed(true);
@@ -203,6 +221,8 @@ impl winit::application::ApplicationHandler for ClientApp {
                             event.repeat,
                             event_loop,
                         );
+                    } else if event.state == ElementState::Pressed {
+                        eprintln!("[input] key not mapped: {code:?}");
                     }
                 }
             }
@@ -417,13 +437,23 @@ impl ClientApp {
                     }
                 })
         });
+        if down {
+            let native_status = match &result {
+                Some(Ok(())) => "sent",
+                Some(Err(_)) => "failed",
+                None => "export missing",
+            };
+            eprintln!(
+                "[input] key down: Android={key_code} evdev={evdev_code} unicode={unicode_char} NativeInputInterface={native_status}"
+            );
+        }
         self.record_input_result(result, event_loop);
         if let Some(handle) = self.game_activity {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_millis() as i64;
-            let _ = roblox_runtime::jni::game_activity::key(
+            match roblox_runtime::jni::game_activity::key(
                 handle,
                 down,
                 key_code,
@@ -433,7 +463,13 @@ impl ClientApp {
                 unicode_char,
                 now,
                 now,
-            );
+            ) {
+                Ok(Some(consumed)) if down => {
+                    eprintln!("[input] GameActivity key handled: consumed={consumed}");
+                }
+                Err(error) => eprintln!("[input] GameActivity key delivery failed: {error}"),
+                _ => {}
+            }
         }
     }
 
