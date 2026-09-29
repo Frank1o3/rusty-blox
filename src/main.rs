@@ -1,8 +1,10 @@
 mod app;
 mod client;
 mod client_settings;
+mod desktop;
 mod host_window;
 mod session;
+mod settings;
 mod startup;
 
 use std::path::PathBuf;
@@ -21,17 +23,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut fast_flags_path = None;
     let mut client_settings = None;
     let mut host_libc = false;
+    let mut settings_mode = false;
     while let Some(arg) = args.next() {
         match arg.to_str() {
             Some("--help" | "-h") => {
                 println!(
-                    "Usage: rusty-blox [--host-libc] [--fast-flags FILE] [--client-settings FILE] [APK]\n\
+                    "Usage: rusty-blox [--settings] [--host-libc] [--fast-flags FILE] [--client-settings FILE] [APK]\n\
                      Without APK, the client looks for Sober's x86-64 installation.\n\
                      --host-libc enables the runtime's ABI-unsafe diagnostic resolver."
                 );
                 return Ok(());
             }
             Some("--host-libc") => host_libc = true,
+            Some("--settings") => settings_mode = true,
             Some("--fast-flags") => {
                 fast_flags_path = Some(PathBuf::from(
                     args.next().ok_or("--fast-flags needs a path")?,
@@ -49,11 +53,29 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             _ => return Err("only one base APK path may be supplied".into()),
         }
     }
+    if settings_mode {
+        return settings::run_ui().map_err(Into::into);
+    }
+    let user_settings = settings::load();
     let fast_flags = if let Some(path) = fast_flags_path {
         serde_json::from_slice(&std::fs::read(path)?)?
     } else {
         serde_json::Value::Object(Default::default())
     };
+    let mut fast_flags = fast_flags;
+    if let Some(limit) = user_settings.fps_limit {
+        let flags = fast_flags
+            .as_object_mut()
+            .ok_or("Fast Flags document must be a JSON object")?;
+        flags
+            .entry("DFIntTaskSchedulerTargetFps")
+            .or_insert_with(|| limit.to_string().into());
+        if limit > 240 {
+            flags
+                .entry("FFlagTaskSchedulerLimitTargetFpsTo2402")
+                .or_insert_with(|| "False".into());
+        }
+    }
     let apks = apk_arg
         .map(|base| {
             let mut apks = vec![base.clone()];
@@ -83,6 +105,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         fast_flags,
         options: roblox_runtime::RuntimeOptions {
             client_settings,
+            graphics_backend: match user_settings.renderer.as_str() {
+                "vulkan" => roblox_runtime::graphics::BackendPreference::Vulkan,
+                "opengl" => roblox_runtime::graphics::BackendPreference::OpenGlEs,
+                _ => roblox_runtime::graphics::BackendPreference::Automatic,
+            },
+            present_mode: Some(if user_settings.vsync {
+                user_settings.present_mode.clone()
+            } else {
+                "immediate".into()
+            }),
+            vsync: user_settings.vsync,
             host_libc,
             ..Default::default()
         },
@@ -99,7 +132,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("Native libraries: {}", config.native_lib_dir.display());
 
     let event_loop = EventLoop::new()?;
-    let mut app = app::ClientApp::new(config, asset_dir);
+    let mut app = app::ClientApp::new(config, asset_dir, user_settings);
     event_loop.run_app(&mut app)?;
     if let Some(error) = app.take_failure() {
         return Err(error.into());

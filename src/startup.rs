@@ -138,7 +138,14 @@ pub(crate) fn initialize_client(
 
     engine
         .start_game_activity(game_activity, size.width, size.height, 1)
-        .map_err(|error| format!("deliver initial surface: {error}"))
+        .map_err(|error| format!("deliver initial surface: {error}"))?;
+    match roblox_runtime::jni::game_activity::set_input_connection(game_activity)
+        .map_err(|error| format!("install GameActivity InputConnection: {error}"))?
+    {
+        Some(()) => println!("GameActivity InputConnection installed"),
+        None => eprintln!("GameActivity InputConnection native is not registered"),
+    }
+    Ok(())
 }
 
 fn call_native(

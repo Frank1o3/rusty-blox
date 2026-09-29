@@ -1,8 +1,9 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use crate::host_window::SurfaceOwner;
-use winit::dpi::PhysicalSize;
-use winit::event::{DeviceEvent, ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::dpi::{PhysicalPosition, PhysicalSize};
+use winit::event::{DeviceEvent, ElementState, Ime, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::window::{CursorGrabMode, Window, WindowId};
@@ -19,6 +20,13 @@ pub(crate) struct ClientApp {
     cursor: (f32, f32),
     modifiers: ModifiersState,
     cursor_locked: bool,
+    text_generation: Option<u32>,
+    text_value: String,
+    text_cursor: usize,
+    forwarded_keys: HashSet<i32>,
+    settings: crate::settings::Settings,
+    game_mode: Option<crate::desktop::GameMode>,
+    discord_presence: Option<crate::desktop::DiscordPresence>,
 }
 
 impl ClientApp {
@@ -38,7 +46,11 @@ impl ClientApp {
         }
     }
 
-    pub(crate) fn new(config: roblox_runtime::RuntimeConfig, asset_dir: PathBuf) -> Self {
+    pub(crate) fn new(
+        config: roblox_runtime::RuntimeConfig,
+        asset_dir: PathBuf,
+        settings: crate::settings::Settings,
+    ) -> Self {
         let data_dir = config.data_dir.clone();
         Self {
             config: Some(config),
@@ -52,6 +64,13 @@ impl ClientApp {
             cursor: (0.0, 0.0),
             modifiers: winit::keyboard::ModifiersState::empty(),
             cursor_locked: false,
+            text_generation: None,
+            text_value: String::new(),
+            text_cursor: 0,
+            forwarded_keys: HashSet::new(),
+            settings,
+            game_mode: None,
+            discord_presence: None,
         }
     }
 
@@ -84,9 +103,15 @@ impl ClientApp {
                 Window::default_attributes()
                     .with_title("roblox-runtime")
                     .with_resizable(true)
+                    .with_maximized(false)
                     .with_inner_size(size),
             )
             .map_err(|error| format!("create host window: {error}"))?;
+        // Some window managers restore the previous size after applying the
+        // initial attributes. Reassert the requested floating size once the
+        // native window exists; this remains a request, not a size constraint.
+        window.set_maximized(false);
+        let _ = window.request_inner_size(size);
         window.set_ime_allowed(true);
         let size = window.inner_size();
         let owner = crate::host_window::SurfaceOwner::install(&window, size)?;
@@ -99,6 +124,11 @@ impl ClientApp {
         let backend = config
             .prepare_graphics()
             .map_err(|error| format!("prepare graphics: {error}"))?;
+        self.game_mode = Some(crate::desktop::GameMode::register(self.settings.gamemode));
+        self.discord_presence = Some(crate::desktop::DiscordPresence::connect(
+            self.settings.discord_presence,
+            &self.settings.discord_application_id,
+        ));
         println!(
             "Host window ready: {}x{} ({backend:?})",
             size.width, size.height
@@ -205,6 +235,9 @@ impl winit::application::ApplicationHandler for ClientApp {
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 if let PhysicalKey::Code(code) = event.physical_key {
+                    if event.state == ElementState::Pressed {
+                        self.editing_key(code);
+                    }
                     if let (Some(key_code), Some(evdev_code)) =
                         (android_key_code(code), evdev_key_code(code))
                     {
@@ -226,6 +259,8 @@ impl winit::application::ApplicationHandler for ClientApp {
                     }
                 }
             }
+            WindowEvent::Ime(Ime::Commit(text)) => self.commit_text(&text),
+            WindowEvent::Ime(Ime::Enabled) => self.update_ime_cursor_area(),
             WindowEvent::Resized(size) if size.width > 0 && size.height > 0 => {
                 let Some(owner) = &self.surface_owner else {
                     return;
@@ -256,6 +291,7 @@ impl winit::application::ApplicationHandler for ClientApp {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         if self.game_activity.is_some() {
             let _ = roblox_runtime::android::looper::poll_for_current_thread(0);
+            self.refresh_text_focus();
             self.sync_cursor_lock();
             if let Some(engine) = &self.engine {
                 crate::session::flush_if_due(engine, &self.data_dir);
@@ -287,6 +323,142 @@ impl winit::application::ApplicationHandler for ClientApp {
 }
 
 impl ClientApp {
+    fn refresh_text_focus(&mut self) {
+        let generation = roblox_runtime::jni::game_activity::textbox_generation();
+        if self.text_generation == Some(generation) {
+            return;
+        }
+        self.text_generation = Some(generation);
+        if roblox_runtime::jni::game_activity::focused_textbox().is_some() {
+            self.text_value = roblox_runtime::jni::game_activity::textbox_text();
+            let state_generation = roblox_runtime::jni::game_activity::ime_state_generation();
+            self.text_cursor = if state_generation != 0 {
+                roblox_runtime::jni::game_activity::ime_state_selection()
+                    .1
+                    .max(0) as usize
+            } else {
+                self.text_value.chars().count()
+            }
+            .min(self.text_value.chars().count());
+            self.update_ime_cursor_area();
+            eprintln!(
+                "[input] text box focused; seeded {} characters",
+                self.text_value.chars().count()
+            );
+        } else {
+            self.text_value.clear();
+            self.text_cursor = 0;
+        }
+    }
+
+    fn update_ime_cursor_area(&self) {
+        let (Some(window), Some(info)) = (
+            self.window.as_ref(),
+            roblox_runtime::jni::game_activity::focused_textbox_info(),
+        ) else {
+            return;
+        };
+        window.set_ime_cursor_area(
+            PhysicalPosition::new(info.x, info.y),
+            PhysicalSize::new(info.width.max(1.0), info.height.max(1.0)),
+        );
+    }
+
+    fn commit_text(&mut self, committed: &str) {
+        self.refresh_text_focus();
+        if roblox_runtime::jni::game_activity::focused_textbox().is_none() || committed.is_empty() {
+            return;
+        }
+        let byte_cursor = self
+            .text_value
+            .char_indices()
+            .nth(self.text_cursor)
+            .map_or(self.text_value.len(), |(offset, _)| offset);
+        self.text_value.insert_str(byte_cursor, committed);
+        self.text_cursor += committed.chars().count();
+        self.send_text_to_engine();
+        eprintln!(
+            "[input] committed {} text characters; caret={}",
+            committed.chars().count(),
+            self.text_cursor
+        );
+    }
+
+    fn editing_key(&mut self, code: KeyCode) {
+        self.refresh_text_focus();
+        if roblox_runtime::jni::game_activity::focused_textbox().is_none() {
+            return;
+        }
+        let mut changed = false;
+        match code {
+            KeyCode::ArrowLeft => self.text_cursor = self.text_cursor.saturating_sub(1),
+            KeyCode::ArrowRight => {
+                self.text_cursor = (self.text_cursor + 1).min(self.text_value.chars().count())
+            }
+            KeyCode::Home => self.text_cursor = 0,
+            KeyCode::End => self.text_cursor = self.text_value.chars().count(),
+            KeyCode::Backspace if self.text_cursor > 0 => {
+                self.text_cursor -= 1;
+                let byte = self
+                    .text_value
+                    .char_indices()
+                    .nth(self.text_cursor)
+                    .unwrap()
+                    .0;
+                self.text_value.remove(byte);
+                changed = true;
+            }
+            KeyCode::Delete if self.text_cursor < self.text_value.chars().count() => {
+                let byte = self
+                    .text_value
+                    .char_indices()
+                    .nth(self.text_cursor)
+                    .unwrap()
+                    .0;
+                self.text_value.remove(byte);
+                changed = true;
+            }
+            _ => return,
+        }
+        if changed
+            || matches!(
+                code,
+                KeyCode::ArrowLeft | KeyCode::ArrowRight | KeyCode::Home | KeyCode::End
+            )
+        {
+            self.send_text_to_engine();
+        }
+    }
+
+    fn send_text_to_engine(&self) {
+        let Some(engine) = self.engine.as_ref() else {
+            return;
+        };
+        let cursor = self.text_cursor.min(i32::MAX as usize) as i32;
+        if let Some(native) = engine.symbol(
+            "Java_com_roblox_engine_jni_NativeGLInterface_syncTextboxTextAndCursorPosition2",
+        ) {
+            // SAFETY: this export belongs to the live loaded engine.
+            if let Err(error) = unsafe {
+                roblox_runtime::jni::game_activity::sync_textbox(native, &self.text_value, cursor)
+            } {
+                eprintln!("rusty-blox: synchronize text box failed: {error}");
+            }
+        } else {
+            eprintln!("rusty-blox: text box synchronization native is missing");
+        }
+        if let Some(handle) = self.game_activity {
+            if let Err(error) = roblox_runtime::jni::game_activity::text_input(
+                handle,
+                &self.text_value,
+                cursor,
+                cursor,
+            ) {
+                eprintln!("rusty-blox: GameActivity text update failed: {error}");
+            }
+        }
+    }
+
     fn sync_cursor_lock(&mut self) {
         let Some(window) = self.window.as_ref() else {
             return;
@@ -421,56 +593,51 @@ impl ClientApp {
         if modifiers.control_key() {
             android_modifiers |= 0x1000;
         }
-        let result = self.engine.as_ref().and_then(|engine| {
-            engine
-                .symbol("Java_com_roblox_engine_jni_NativeInputInterface_nativePassKeyEvent")
-                .map(|native| {
-                    // SAFETY: this export belongs to the live engine library.
-                    unsafe {
-                        roblox_runtime::jni::game_activity::pass_key_event(
-                            native,
-                            down,
-                            evdev_code,
-                            android_modifiers,
-                            repeat,
-                        )
-                    }
+        let text_box_focused = roblox_runtime::jni::game_activity::focused_textbox().is_some();
+        let text_key = is_evdev_text_key(evdev_code);
+        let send_to_game = if down {
+            !(text_box_focused && text_key)
+        } else {
+            self.forwarded_keys.remove(&evdev_code)
+        };
+        let result = send_to_game
+            .then(|| {
+                self.engine.as_ref().and_then(|engine| {
+                    engine
+                        .symbol("Java_com_roblox_engine_jni_NativeGLInterface_nativePassKeyEvent")
+                        .map(|native| {
+                            // SAFETY: this export belongs to the live engine library.
+                            unsafe {
+                                roblox_runtime::jni::game_activity::pass_key_event(
+                                    native,
+                                    down,
+                                    evdev_code,
+                                    android_modifiers,
+                                    repeat,
+                                )
+                            }
+                        })
                 })
-        });
+            })
+            .flatten();
+        if down && send_to_game && result.is_some() {
+            self.forwarded_keys.insert(evdev_code);
+        }
         if down {
-            let native_status = match &result {
-                Some(Ok(())) => "sent",
-                Some(Err(_)) => "failed",
-                None => "export missing",
+            let native_status = if text_box_focused && text_key {
+                "suppressed for text box"
+            } else {
+                match &result {
+                    Some(Ok(())) => "sent",
+                    Some(Err(_)) => "failed",
+                    None => "export missing",
+                }
             };
             eprintln!(
                 "[input] key down: Android={key_code} evdev={evdev_code} unicode={unicode_char} NativeInputInterface={native_status}"
             );
         }
         self.record_input_result(result, event_loop);
-        if let Some(handle) = self.game_activity {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as i64;
-            match roblox_runtime::jni::game_activity::key(
-                handle,
-                down,
-                key_code,
-                evdev_code,
-                android_modifiers,
-                i32::from(repeat),
-                unicode_char,
-                now,
-                now,
-            ) {
-                Ok(Some(consumed)) if down => {
-                    eprintln!("[input] GameActivity key handled: consumed={consumed}");
-                }
-                Err(error) => eprintln!("[input] GameActivity key delivery failed: {error}"),
-                _ => {}
-            }
-        }
     }
 
     fn record_input_result(
@@ -505,6 +672,23 @@ fn android_key_code(code: KeyCode) -> Option<i32> {
         KeyCode::Digit7 => 14,
         KeyCode::Digit8 => 15,
         KeyCode::Digit9 => 16,
+        KeyCode::Numpad0 => 144,
+        KeyCode::Numpad1 => 145,
+        KeyCode::Numpad2 => 146,
+        KeyCode::Numpad3 => 147,
+        KeyCode::Numpad4 => 148,
+        KeyCode::Numpad5 => 149,
+        KeyCode::Numpad6 => 150,
+        KeyCode::Numpad7 => 151,
+        KeyCode::Numpad8 => 152,
+        KeyCode::Numpad9 => 153,
+        KeyCode::NumpadDivide => 154,
+        KeyCode::NumpadMultiply => 155,
+        KeyCode::NumpadSubtract => 156,
+        KeyCode::NumpadAdd => 157,
+        KeyCode::NumpadDecimal => 158,
+        KeyCode::NumpadComma => 159,
+        KeyCode::NumpadEqual => 161,
         KeyCode::KeyA => 29,
         KeyCode::KeyB => 30,
         KeyCode::KeyC => 31,
@@ -539,7 +723,8 @@ fn android_key_code(code: KeyCode) -> Option<i32> {
         KeyCode::ShiftRight => 60,
         KeyCode::Tab => 61,
         KeyCode::Space => 62,
-        KeyCode::Enter | KeyCode::NumpadEnter => 66,
+        KeyCode::Enter => 66,
+        KeyCode::NumpadEnter => 160,
         KeyCode::Backspace => 67,
         KeyCode::Backquote => 68,
         KeyCode::Minus => 69,
@@ -595,6 +780,23 @@ fn evdev_key_code(code: KeyCode) -> Option<i32> {
         KeyCode::Digit8 => 9,
         KeyCode::Digit9 => 10,
         KeyCode::Digit0 => 11,
+        KeyCode::Numpad1 => 79,
+        KeyCode::Numpad2 => 80,
+        KeyCode::Numpad3 => 81,
+        KeyCode::Numpad4 => 75,
+        KeyCode::Numpad5 => 76,
+        KeyCode::Numpad6 => 77,
+        KeyCode::Numpad7 => 71,
+        KeyCode::Numpad8 => 72,
+        KeyCode::Numpad9 => 73,
+        KeyCode::Numpad0 => 82,
+        KeyCode::NumpadDecimal => 83,
+        KeyCode::NumpadAdd => 78,
+        KeyCode::NumpadSubtract => 74,
+        KeyCode::NumpadMultiply => 55,
+        KeyCode::NumpadDivide => 98,
+        KeyCode::NumpadComma => 121,
+        KeyCode::NumpadEqual => 117,
         KeyCode::KeyQ => 16,
         KeyCode::KeyW => 17,
         KeyCode::KeyE => 18,
@@ -623,7 +825,8 @@ fn evdev_key_code(code: KeyCode) -> Option<i32> {
         KeyCode::KeyM => 50,
         KeyCode::Escape => 1,
         KeyCode::Tab => 15,
-        KeyCode::Enter | KeyCode::NumpadEnter => 28,
+        KeyCode::Enter => 28,
+        KeyCode::NumpadEnter => 96,
         KeyCode::Backspace => 14,
         KeyCode::Space => 57,
         KeyCode::ShiftLeft => 42,
@@ -650,4 +853,8 @@ fn evdev_key_code(code: KeyCode) -> Option<i32> {
         KeyCode::F12 => 88,
         _ => return None,
     })
+}
+
+fn is_evdev_text_key(code: i32) -> bool {
+    matches!(code, 2..=13 | 16..=27 | 30..=41 | 44..=55 | 57 | 71..=83 | 98 | 117 | 121)
 }
