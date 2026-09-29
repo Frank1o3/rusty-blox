@@ -270,7 +270,17 @@ impl winit::application::ApplicationHandler for ClientApp {
                         // relying on `Ime::Commit` alone leaves Roblox's text
                         // box with no characters (the corresponding game key
                         // is intentionally suppressed below).
-                        if let Some(text) = event.text.as_deref() {
+                        let text = event
+                            .text
+                            .as_deref()
+                            .or_else(|| event.logical_key.to_text());
+                        if roblox_runtime::jni::game_activity::focused_textbox().is_some() {
+                            let characters = text
+                                .map(|text| text.chars().filter(|ch| !ch.is_control()).count())
+                                .unwrap_or(0);
+                            eprintln!("[input] focused text key; printable characters={characters}");
+                        }
+                        if let Some(text) = text {
                             let printable: String = text
                                 .chars()
                                 .filter(|character| !character.is_control())

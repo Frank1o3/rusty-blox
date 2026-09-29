@@ -194,6 +194,30 @@ pub(crate) fn run_ui() -> Result<(), String> {
         for session in initial_sessions { session_picker.append(Some(session.name()), session.name()); }
         session_picker.set_active_id(settings.session.as_deref().or(Some("")));
         session_page.append(&labeled("Use this session on the next launch", &session_picker));
+        let set_default = gtk::Button::with_label("Set as default session");
+        let picker_for_default = session_picker.clone();
+        let session_status = gtk::Label::new(None);
+        session_status.set_halign(gtk::Align::Start);
+        let status_for_default = session_status.clone();
+        set_default.connect_clicked(move |_| {
+            let mut value = load();
+            value.session = picker_for_default
+                .active_id()
+                .map(|name| name.to_string())
+                .filter(|name| !name.is_empty());
+            match save(&value) {
+                Ok(()) => {
+                    let message = value.session.as_ref().map_or_else(
+                        || "Roblox will start without a saved session on the next launch.".to_owned(),
+                        |name| format!("'{name}' will be used by default on the next launch."),
+                    );
+                    status_for_default.set_text(&message);
+                }
+                Err(error) => status_for_default.set_text(&error),
+            }
+        });
+        session_page.append(&set_default);
+        session_page.append(&session_status);
         let add_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         let session_name = gtk::Entry::builder().placeholder_text("New session name").hexpand(true).build();
         let add_button = gtk::Button::with_label("Add session");
@@ -207,14 +231,14 @@ pub(crate) fn run_ui() -> Result<(), String> {
         let picker_ref = session_picker.clone();
         let name_ref = session_name.clone();
         let root_ref = sessions_root.clone();
-        let status_ref = status.clone();
+        let status_ref = session_status.clone();
         add_button.connect_clicked(move |_| {
             let name = name_ref.text().trim().to_owned();
             match roblox_runtime::session::Session::open(&root_ref, &name) {
                 Ok(session) => {
                     if picker_ref.active_id().as_deref() != Some(session.name()) { picker_ref.append(Some(session.name()), session.name()); }
                     picker_ref.set_active_id(Some(session.name()));
-                    status_ref.set_text(&format!("Added session '{}'. Save settings to select it for launch.", session.name()));
+                    status_ref.set_text(&format!("Added session '{}'. Select it and set it as the default to use it on launch.", session.name()));
                     name_ref.set_text("");
                 }
                 Err(error) => status_ref.set_text(&error),

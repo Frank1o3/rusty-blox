@@ -21,10 +21,11 @@ window on X11 or Wayland. For Wayland it owns a `wl_egl_window` for as long as
 the runtime surface is installed. It asks the runtime to map the engine, run
 its deferred constructors, initialise JNI and GameActivity, perform the
 app-bridge startup calls, and deliver the first surface. Resize events update
-both the host EGL window and Roblox's surface callbacks. Mouse and a mapped
-keyboard subset are forwarded to the runtime. IME text forwarding, the runtime
-event pump and render context remain unfinished, so reaching GameActivity
-startup does not establish that a playable game appears.
+both the host EGL window and Roblox's surface callbacks. Mouse, a mapped
+keyboard subset, and committed text for focused Roblox text boxes are
+forwarded to the runtime. The runtime event pump and render context remain
+unfinished, so reaching GameActivity startup does not establish that a
+playable game appears.
 
 Pass a base APK as the positional argument, or use Sober's installed build. The
 client also accepts `--fast-flags FILE` and `--client-settings FILE` and passes
@@ -32,8 +33,16 @@ those inputs in `RuntimeConfig`. `--host-libc` opts into the runtime's
 ABI-unsafe diagnostic symbol resolver; it is off by default.
 
 Use `rusty-blox --settings` and open the Sessions tab to create a named login
-profile and choose which profile the next launch loads. The default is “No
-saved session”. A new profile signs in through Roblox on its first launch and
-saves its cookies when the client exits. `--session NAME` overrides the
-selected profile for one launch. Only one Roblox process can run at a time
-because the engine and JNI state are process-global.
+profile, select it, and click **Set as default session** to use it on later
+launches. The default is “No saved session”. A new profile signs in through
+Roblox on its first launch and saves its cookies when the client exits.
+`--session NAME` overrides the selected profile for one launch. Only one
+Roblox process can run at a time because the engine and JNI state are
+process-global.
+
+The in-progress Rust JNI VM can be selected for one launch from fish with
+`env USE_EXPERIMENTAL_JNIVM=1 rusty-blox`. The variable accepts `1` or `true`.
+This backend has initialized JNI and GameActivity in an observed run, but it
+has not yet been shown to reach a usable Roblox session; keep it unset for
+normal use. In fish, `set -gx USE_EXPERIMENTAL_JNIVM 1` enables it for later
+commands in that shell, and `set -e USE_EXPERIMENTAL_JNIVM` turns it off.
