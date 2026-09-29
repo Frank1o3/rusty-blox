@@ -79,6 +79,10 @@ impl ClientApp {
             .map_err(|error| format!("initialize engine JNI: {error}"))?;
         println!("JNI_OnLoad returned 0x{jni_version:x}");
 
+        engine
+            .prepare_startup_directories()
+            .map_err(|error| format!("set Roblox startup directories: {error}"))?;
+
         let settings = crate::client_settings::load(
             config.options.client_settings.as_deref(),
             &config.cache_dir,

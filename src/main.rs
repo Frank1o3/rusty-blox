@@ -88,7 +88,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     };
     let system_dir = config.prepare_android_environment()?;
     let asset_dir = config.prepare_asset_tree()?;
-    enter_run_directory(&config.data_dir, &asset_dir)?;
+    let run_dir = config.prepare_engine_working_directory(&asset_dir)?;
+    println!("Roblox working directory: {}", run_dir.display());
     println!("Android system files: {}", system_dir.display());
     println!("APK assets: {}", asset_dir.display());
     for apk in &config.apk_paths {
@@ -102,25 +103,5 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(error) = app.take_failure() {
         return Err(error.into());
     }
-    Ok(())
-}
-
-fn enter_run_directory(data_dir: &std::path::Path, asset_dir: &std::path::Path) -> std::io::Result<()> {
-    // Android gives the engine a private working directory. Roblox resolves
-    // appData, http, sounds, and ./exe/cacert.pem relative to this directory.
-    let run_dir = data_dir.join("run");
-    let exe_dir = run_dir.join("exe");
-    std::fs::create_dir_all(&exe_dir)?;
-
-    let ca_bundle = asset_dir.join("ssl/cacert.pem");
-    if ca_bundle.is_file() {
-        std::fs::copy(ca_bundle, exe_dir.join("cacert.pem"))?;
-    } else {
-        eprintln!("[runtime] APK CA bundle is missing: {}", ca_bundle.display());
-    }
-
-    let run_dir = std::fs::canonicalize(run_dir)?;
-    std::env::set_current_dir(&run_dir)?;
-    println!("Roblox working directory: {}", run_dir.display());
     Ok(())
 }
