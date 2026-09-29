@@ -5,7 +5,7 @@ use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
-use winit::window::{Window, WindowId};
+use winit::window::{CursorGrabMode, Window, WindowId};
 
 pub(crate) struct ClientApp {
     config: Option<roblox_runtime::RuntimeConfig>,
@@ -17,6 +17,7 @@ pub(crate) struct ClientApp {
     failure: Option<String>,
     cursor: (f32, f32),
     modifiers: ModifiersState,
+    cursor_locked: bool,
 }
 
 impl ClientApp {
@@ -31,6 +32,7 @@ impl ClientApp {
             failure: None,
             cursor: (0.0, 0.0),
             modifiers: winit::keyboard::ModifiersState::empty(),
+            cursor_locked: false,
         }
     }
 
@@ -200,6 +202,7 @@ impl winit::application::ApplicationHandler for ClientApp {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         if self.game_activity.is_some() {
             let _ = roblox_runtime::android::looper::poll_for_current_thread(0);
+            self.sync_cursor_lock();
         }
         event_loop.set_control_flow(ControlFlow::WaitUntil(
             std::time::Instant::now() + std::time::Duration::from_millis(16),
@@ -208,6 +211,56 @@ impl winit::application::ApplicationHandler for ClientApp {
 }
 
 impl ClientApp {
+    fn sync_cursor_lock(&mut self) {
+        let Some(window) = self.window.as_ref() else {
+            return;
+        };
+        let Some(native) = self.engine.as_ref().and_then(|engine| {
+            engine.symbol(
+                "Java_com_roblox_engine_jni_NativeInputInterface_nativeGetMainWindowIsMouseLockedCenter",
+            )
+        }) else {
+            return;
+        };
+        // SAFETY: this is the live getter export from the loaded Roblox library.
+        let wants_lock = match unsafe {
+            roblox_runtime::jni::game_activity::call_static_bare_bool(
+                native,
+                "com/roblox/engine/jni/NativeInputInterface",
+            )
+        } {
+            Ok(wants_lock) => wants_lock,
+            Err(error) => {
+                eprintln!("rusty-blox: read Roblox mouse lock request failed: {error}");
+                return;
+            }
+        };
+        if wants_lock == self.cursor_locked {
+            return;
+        }
+
+        if wants_lock {
+            let result = window
+                .set_cursor_grab(CursorGrabMode::Locked)
+                .or_else(|_| window.set_cursor_grab(CursorGrabMode::Confined));
+            match result {
+                Ok(()) => {
+                    window.set_cursor_visible(false);
+                    self.cursor_locked = true;
+                    eprintln!("rusty-blox: cursor captured by Roblox");
+                }
+                Err(error) => eprintln!("rusty-blox: cursor capture failed: {error}"),
+            }
+        } else {
+            if let Err(error) = window.set_cursor_grab(CursorGrabMode::None) {
+                eprintln!("rusty-blox: cursor release failed: {error}");
+            }
+            window.set_cursor_visible(true);
+            self.cursor_locked = false;
+            eprintln!("rusty-blox: cursor released by Roblox");
+        }
+    }
+
     fn forward_mouse_move(
         &mut self,
         position: (f32, f32),
