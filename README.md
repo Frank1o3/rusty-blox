@@ -30,3 +30,10 @@ Pass a base APK as the positional argument, or use Sober's installed build. The
 client also accepts `--fast-flags FILE` and `--client-settings FILE` and passes
 those inputs in `RuntimeConfig`. `--host-libc` opts into the runtime's
 ABI-unsafe diagnostic symbol resolver; it is off by default.
+
+Use `rusty-blox --settings` and open the Sessions tab to create a named login
+profile and choose which profile the next launch loads. The default is “No
+saved session”. A new profile signs in through Roblox on its first launch and
+saves its cookies when the client exits. `--session NAME` overrides the
+selected profile for one launch. Only one Roblox process can run at a time
+because the engine and JNI state are process-global.

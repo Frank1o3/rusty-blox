@@ -11,7 +11,6 @@ use winit::window::{CursorGrabMode, Window, WindowId};
 pub(crate) struct ClientApp {
     config: Option<roblox_runtime::RuntimeConfig>,
     asset_dir: PathBuf,
-    data_dir: PathBuf,
     session_dir: Option<PathBuf>,
     window: Option<Window>,
     surface_owner: Option<SurfaceOwner>,
@@ -21,6 +20,8 @@ pub(crate) struct ClientApp {
     cursor: (f32, f32),
     modifiers: ModifiersState,
     cursor_locked: bool,
+    window_focused: bool,
+    cursor_inside: bool,
     text_generation: Option<u32>,
     text_value: String,
     text_cursor: usize,
@@ -52,7 +53,6 @@ impl ClientApp {
         asset_dir: PathBuf,
         settings: crate::settings::Settings,
     ) -> Self {
-        let data_dir = config.data_dir.clone();
         let session_dir = config
             .session
             .as_ref()
@@ -60,7 +60,6 @@ impl ClientApp {
         Self {
             config: Some(config),
             asset_dir,
-            data_dir,
             session_dir,
             window: None,
             surface_owner: None,
@@ -70,6 +69,8 @@ impl ClientApp {
             cursor: (0.0, 0.0),
             modifiers: winit::keyboard::ModifiersState::empty(),
             cursor_locked: false,
+            window_focused: false,
+            cursor_inside: false,
             text_generation: None,
             text_value: String::new(),
             text_cursor: 0,
@@ -214,6 +215,24 @@ impl winit::application::ApplicationHandler for ClientApp {
             WindowEvent::CloseRequested => {
                 roblox_runtime::graphics::clear_surface();
                 event_loop.exit();
+            }
+            WindowEvent::Focused(focused) => {
+                self.window_focused = focused;
+                if !focused && self.cursor_locked {
+                    if let Some(window) = self.window.as_ref() {
+                        let _ = window.set_cursor_grab(CursorGrabMode::None);
+                    }
+                    self.cursor_locked = false;
+                }
+                self.update_system_cursor_visibility();
+            }
+            WindowEvent::CursorEntered { .. } => {
+                self.cursor_inside = true;
+                self.update_system_cursor_visibility();
+            }
+            WindowEvent::CursorLeft { .. } => {
+                self.cursor_inside = false;
+                self.update_system_cursor_visibility();
             }
             WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers.state(),
             WindowEvent::CursorMoved { position, .. } => {
@@ -487,7 +506,7 @@ impl ClientApp {
                 "com/roblox/engine/jni/NativeInputInterface",
             )
         } {
-            Ok(wants_lock) => wants_lock,
+            Ok(wants_lock) => wants_lock && self.window_focused,
             Err(error) => {
                 eprintln!("rusty-blox: read Roblox mouse lock request failed: {error}");
                 return;
@@ -503,8 +522,8 @@ impl ClientApp {
                 .or_else(|_| window.set_cursor_grab(CursorGrabMode::Confined));
             match result {
                 Ok(()) => {
-                    window.set_cursor_visible(false);
                     self.cursor_locked = true;
+                    self.update_system_cursor_visibility();
                     eprintln!("rusty-blox: cursor captured by Roblox");
                 }
                 Err(error) => eprintln!("rusty-blox: cursor capture failed: {error}"),
@@ -513,9 +532,19 @@ impl ClientApp {
             if let Err(error) = window.set_cursor_grab(CursorGrabMode::None) {
                 eprintln!("rusty-blox: cursor release failed: {error}");
             }
-            window.set_cursor_visible(true);
             self.cursor_locked = false;
+            self.update_system_cursor_visibility();
             eprintln!("rusty-blox: cursor released by Roblox");
+        }
+    }
+
+    fn update_system_cursor_visibility(&self) {
+        if let Some(window) = self.window.as_ref() {
+            // Roblox draws its own pointer. Hide the host pointer over or while
+            // focused on the game window, including when Roblox releases grab.
+            window.set_cursor_visible(
+                !(self.window_focused || self.cursor_inside || self.cursor_locked),
+            );
         }
     }
 

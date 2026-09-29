@@ -13,6 +13,7 @@ pub(crate) struct Settings {
     pub vsync: bool,
     pub present_mode: String,
     pub fps_limit: Option<u32>,
+    pub session: Option<String>,
 }
 
 impl Default for Settings {
@@ -25,6 +26,7 @@ impl Default for Settings {
             vsync: true,
             present_mode: "fifo".into(),
             fps_limit: None,
+            session: None,
         }
     }
 }
@@ -71,17 +73,22 @@ pub(crate) fn run_ui() -> Result<(), String> {
         root.set_margin_bottom(20);
         root.set_margin_start(20);
         root.set_margin_end(20);
+        let stack = gtk::Stack::new();
+        let switcher = gtk::StackSwitcher::new();
+        switcher.set_stack(Some(&stack));
+        root.append(&switcher);
+        let settings_page = gtk::Box::new(gtk::Orientation::Vertical, 12);
         let heading = gtk::Label::new(Some("Performance and client settings"));
         heading.add_css_class("title-2");
         heading.set_halign(gtk::Align::Start);
-        root.append(&heading);
+        settings_page.append(&heading);
 
         let gamemode = gtk::CheckButton::with_label("Enable Feral GameMode while Roblox runs");
         gamemode.set_active(settings.gamemode);
-        root.append(&gamemode);
+        settings_page.append(&gamemode);
         let presence = gtk::CheckButton::with_label("Enable Discord Rich Presence");
         presence.set_active(settings.discord_presence);
-        root.append(&presence);
+        settings_page.append(&presence);
         let app_id = gtk::Entry::builder()
             .placeholder_text("Discord Application ID")
             .text(&settings.discord_application_id)
@@ -89,7 +96,7 @@ pub(crate) fn run_ui() -> Result<(), String> {
         app_id.set_sensitive(settings.discord_presence);
         let app_id_ref = app_id.clone();
         presence.connect_toggled(move |button| app_id_ref.set_sensitive(button.is_active()));
-        root.append(&app_id);
+        settings_page.append(&app_id);
 
         let renderer = gtk::ComboBoxText::new();
         for (id, label) in [
@@ -100,10 +107,10 @@ pub(crate) fn run_ui() -> Result<(), String> {
             renderer.append(Some(id), label);
         }
         renderer.set_active_id(Some(&settings.renderer));
-        root.append(&labeled("Rendering pipeline", &renderer));
+        settings_page.append(&labeled("Rendering pipeline", &renderer));
         let vsync = gtk::CheckButton::with_label("Enable VSync");
         vsync.set_active(settings.vsync);
-        root.append(&vsync);
+        settings_page.append(&vsync);
         let present = gtk::ComboBoxText::new();
         for (id, label) in [
             ("fifo", "FIFO (steady VSync)"),
@@ -132,19 +139,22 @@ pub(crate) fn run_ui() -> Result<(), String> {
                 vsync_ref.is_active() && renderer_ref.active_id().as_deref() == Some("vulkan"),
             )
         });
-        root.append(&labeled("Vulkan presentation mode", &present));
+        settings_page.append(&labeled("Vulkan presentation mode", &present));
         let fps = gtk::SpinButton::with_range(0.0, 1000.0, 1.0);
         fps.set_value(settings.fps_limit.unwrap_or(0) as f64);
-        root.append(&labeled("FPS limit (0 = unlimited)", &fps));
+        settings_page.append(&labeled("FPS limit (0 = unlimited)", &fps));
         let note = gtk::Label::new(Some(
             "OpenGL ES follows the game's swap interval. Vulkan mode choices apply only to Vulkan.",
         ));
         note.set_wrap(true);
         note.set_halign(gtk::Align::Start);
-        root.append(&note);
+        settings_page.append(&note);
         let status = gtk::Label::new(None);
         status.set_halign(gtk::Align::Start);
-        root.append(&status);
+        settings_page.append(&status);
+        let session_picker = gtk::ComboBoxText::new();
+        let picker_for_save = session_picker.clone();
+        let status_for_save = status.clone();
         let save_button = gtk::Button::with_label("Save settings");
         let window_ref = window.clone();
         save_button.connect_clicked(move |_| {
@@ -163,17 +173,62 @@ pub(crate) fn run_ui() -> Result<(), String> {
                     .map(|id| id.to_string())
                     .unwrap_or_else(|| "fifo".into()),
                 fps_limit: (limit > 0).then_some(limit),
+                session: match picker_for_save.active_id().as_deref() { Some("") | None => None, Some(name) => Some(name.to_owned()) },
             };
             match save(&value) {
-                Ok(()) => status.set_text("Saved. Changes apply on the next launch."),
-                Err(error) => status.set_text(&error),
+                Ok(()) => status_for_save.set_text("Saved. Changes apply on the next launch."),
+                Err(error) => status_for_save.set_text(&error),
             }
         });
-        root.append(&save_button);
+        settings_page.append(&save_button);
+        let session_page = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        let session_heading = gtk::Label::new(Some("Roblox sessions"));
+        session_heading.add_css_class("title-2");
+        session_heading.set_halign(gtk::Align::Start);
+        session_page.append(&session_heading);
+        session_picker.append(Some(""), "No saved session");
+        let sessions_root = crate::client::managed_install_dir()
+            .unwrap_or_else(|| PathBuf::from(".").join("rusty-blox"))
+            .join("sessions");
+        let initial_sessions = roblox_runtime::session::Session::list(&sessions_root).unwrap_or_default();
+        for session in initial_sessions { session_picker.append(Some(session.name()), session.name()); }
+        session_picker.set_active_id(settings.session.as_deref().or(Some("")));
+        session_page.append(&labeled("Use this session on the next launch", &session_picker));
+        let add_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        let session_name = gtk::Entry::builder().placeholder_text("New session name").hexpand(true).build();
+        let add_button = gtk::Button::with_label("Add session");
+        add_row.append(&session_name);
+        add_row.append(&add_button);
+        session_page.append(&add_row);
+        let session_note = gtk::Label::new(Some("A new session starts logged out. Select it and launch Roblox to sign in; its login is saved separately."));
+        session_note.set_wrap(true);
+        session_note.set_halign(gtk::Align::Start);
+        session_page.append(&session_note);
+        let picker_ref = session_picker.clone();
+        let name_ref = session_name.clone();
+        let root_ref = sessions_root.clone();
+        let status_ref = status.clone();
+        add_button.connect_clicked(move |_| {
+            let name = name_ref.text().trim().to_owned();
+            match roblox_runtime::session::Session::open(&root_ref, &name) {
+                Ok(session) => {
+                    if picker_ref.active_id().as_deref() != Some(session.name()) { picker_ref.append(Some(session.name()), session.name()); }
+                    picker_ref.set_active_id(Some(session.name()));
+                    status_ref.set_text(&format!("Added session '{}'. Save settings to select it for launch.", session.name()));
+                    name_ref.set_text("");
+                }
+                Err(error) => status_ref.set_text(&error),
+            }
+        });
+        stack.add_titled(&settings_page, Some("general"), "General");
+        stack.add_titled(&session_page, Some("sessions"), "Sessions");
+        root.append(&stack);
         window_ref.set_child(Some(&root));
         window_ref.present();
     });
-    app.run();
+    // `--settings` was already consumed by rusty-blox. Do not pass it on to
+    // GTK's own command-line parser, which rejects unknown application args.
+    app.run_with_args(&["rusty-blox-settings"]);
     Ok(())
 }
 

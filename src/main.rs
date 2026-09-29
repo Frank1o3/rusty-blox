@@ -69,6 +69,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&lock_root)?;
     let _instance_lock = InstanceLock::acquire(&lock_root.join("roblox-instance.lock"))?;
     let user_settings = settings::load();
+    let session_name = session_name.or_else(|| user_settings.session.clone());
     let fast_flags = if let Some(path) = fast_flags_path {
         serde_json::from_slice(&std::fs::read(path)?)?
     } else {
