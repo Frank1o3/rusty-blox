@@ -69,6 +69,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&lock_root)?;
     let _instance_lock = InstanceLock::acquire(&lock_root.join("roblox-instance.lock"))?;
     let user_settings = settings::load();
+    let env_requests_rust = std::env::var("USE_EXPERIMENTAL_JNIVM").is_ok_and(|value| {
+        matches!(value.trim().to_ascii_lowercase().as_str(), "true" | "1")
+    });
+    let use_rust_jnivm = user_settings.rust_jnivm || env_requests_rust;
+    // The JNI backend is selected during native startup, before the client
+    // creates worker threads. Keep the existing environment opt-in as a
+    // developer override (dev.sh uses it) while making the saved UI choice the
+    // normal launch path.
+    unsafe {
+        std::env::set_var("USE_EXPERIMENTAL_JNIVM", if use_rust_jnivm { "1" } else { "0" });
+    }
+    roblox_runtime::set_jnivm_cpp_fallback(user_settings.jnivm_cpp_fallback);
     let session_name = session_name.or_else(|| user_settings.session.clone());
     let fast_flags = if let Some(path) = fast_flags_path {
         serde_json::from_slice(&std::fs::read(path)?)?
@@ -129,6 +141,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 "immediate".into()
             }),
             vsync: user_settings.vsync,
+            opengl_swap_interval: match user_settings.gl_swap_interval.as_str() {
+                "off" => 0,
+                "adaptive" => -1,
+                _ => 1,
+            },
             host_libc,
             ..Default::default()
         },

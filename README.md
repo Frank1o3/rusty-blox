@@ -40,12 +40,14 @@ Roblox on its first launch and saves its cookies when the client exits.
 Roblox process can run at a time because the engine and JNI state are
 process-global.
 
-The in-progress Rust JNI VM can be selected for one launch from fish with
-`env USE_EXPERIMENTAL_JNIVM=1 rusty-blox`. The variable accepts `1` or `true`.
-This backend has initialized JNI and GameActivity in an observed run, but it
-has not yet been shown to reach a usable Roblox session; keep it unset for
-normal use. In fish, `set -gx USE_EXPERIMENTAL_JNIVM 1` enables it for later
-commands in that shell, and `set -e USE_EXPERIMENTAL_JNIVM` turns it off.
-For development, `./dev.sh` runs `cargo run -- --host-libc` with the
-experimental VM enabled and replaces `rusty-blox.log` with that run's combined
-output while also showing it in the terminal.
+The General tab in `rusty-blox --settings` selects the JNI backend. C++
+libjnivm is the default. If Rust JNI is selected, the checkbox controls whether
+unhandled methods and fields can fall back to C++ libjnivm; fallback is enabled
+by default. The OpenGL ES swap interval can be set to off (0), on (1), or
+adaptive (-1, if the host driver supports it). These settings apply on the next
+launch.
+
+For development, `USE_EXPERIMENTAL_JNIVM=1` or `true` overrides the saved JNI
+backend choice and enables Rust JNI for that launch. `./dev.sh` uses that
+override, runs with `--host-libc`, and replaces `rusty-blox.log` with the
+combined output while also showing it in the terminal.

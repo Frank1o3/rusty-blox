@@ -12,6 +12,9 @@ pub(crate) struct Settings {
     pub renderer: String,
     pub vsync: bool,
     pub present_mode: String,
+    pub gl_swap_interval: String,
+    pub rust_jnivm: bool,
+    pub jnivm_cpp_fallback: bool,
     pub fps_limit: Option<u32>,
     pub session: Option<String>,
 }
@@ -25,6 +28,9 @@ impl Default for Settings {
             renderer: "auto".into(),
             vsync: true,
             present_mode: "fifo".into(),
+            gl_swap_interval: "on".into(),
+            rust_jnivm: false,
+            jnivm_cpp_fallback: true,
             fps_limit: None,
             session: None,
         }
@@ -83,6 +89,22 @@ pub(crate) fn run_ui() -> Result<(), String> {
         heading.set_halign(gtk::Align::Start);
         settings_page.append(&heading);
 
+        let jni_backend = gtk::ComboBoxText::new();
+        jni_backend.append(Some("cpp"), "C++ libjnivm (default)");
+        jni_backend.append(Some("rust"), "Rust JNI VM");
+        jni_backend.set_active_id(Some(if settings.rust_jnivm { "rust" } else { "cpp" }));
+        settings_page.append(&labeled("JNI backend", &jni_backend));
+        let jni_fallback = gtk::CheckButton::with_label(
+            "Use C++ libjnivm for methods and fields Rust does not handle",
+        );
+        jni_fallback.set_active(settings.jnivm_cpp_fallback);
+        jni_fallback.set_sensitive(settings.rust_jnivm);
+        let fallback_ref = jni_fallback.clone();
+        jni_backend.connect_changed(move |backend| {
+            fallback_ref.set_sensitive(backend.active_id().as_deref() == Some("rust"));
+        });
+        settings_page.append(&jni_fallback);
+
         let gamemode = gtk::CheckButton::with_label("Enable Feral GameMode while Roblox runs");
         gamemode.set_active(settings.gamemode);
         settings_page.append(&gamemode);
@@ -140,11 +162,38 @@ pub(crate) fn run_ui() -> Result<(), String> {
             )
         });
         settings_page.append(&labeled("Vulkan presentation mode", &present));
+        let gl_interval = gtk::ComboBoxText::new();
+        for (id, label) in [
+            ("off", "Off (0)"),
+            ("on", "On (1)"),
+            ("adaptive", "Adaptive (-1, if supported)"),
+        ] {
+            gl_interval.append(Some(id), label);
+        }
+        gl_interval.set_active_id(Some(&settings.gl_swap_interval));
+        gl_interval.set_sensitive(settings.vsync && settings.renderer == "opengl");
+        let gl_interval_ref = gl_interval.clone();
+        let vsync_ref = vsync.clone();
+        let renderer_ref = renderer.clone();
+        vsync.connect_toggled(move |_| {
+            gl_interval_ref.set_sensitive(
+                vsync_ref.is_active() && renderer_ref.active_id().as_deref() == Some("opengl"),
+            )
+        });
+        let gl_interval_ref = gl_interval.clone();
+        let vsync_ref = vsync.clone();
+        let renderer_ref = renderer.clone();
+        renderer.connect_changed(move |_| {
+            gl_interval_ref.set_sensitive(
+                vsync_ref.is_active() && renderer_ref.active_id().as_deref() == Some("opengl"),
+            )
+        });
+        settings_page.append(&labeled("OpenGL ES swap interval", &gl_interval));
         let fps = gtk::SpinButton::with_range(0.0, 1000.0, 1.0);
         fps.set_value(settings.fps_limit.unwrap_or(0) as f64);
         settings_page.append(&labeled("FPS limit (0 = unlimited)", &fps));
         let note = gtk::Label::new(Some(
-            "OpenGL ES follows the game's swap interval. Vulkan mode choices apply only to Vulkan.",
+            "OpenGL ES uses the selected EGL swap interval. Adaptive mode uses interval -1 and depends on driver support.",
         ));
         note.set_wrap(true);
         note.set_halign(gtk::Align::Start);
@@ -172,6 +221,12 @@ pub(crate) fn run_ui() -> Result<(), String> {
                     .active_id()
                     .map(|id| id.to_string())
                     .unwrap_or_else(|| "fifo".into()),
+                gl_swap_interval: gl_interval
+                    .active_id()
+                    .map(|id| id.to_string())
+                    .unwrap_or_else(|| "on".into()),
+                rust_jnivm: jni_backend.active_id().as_deref() == Some("rust"),
+                jnivm_cpp_fallback: jni_fallback.is_active(),
                 fps_limit: (limit > 0).then_some(limit),
                 session: match picker_for_save.active_id().as_deref() { Some("") | None => None, Some(name) => Some(name.to_owned()) },
             };
