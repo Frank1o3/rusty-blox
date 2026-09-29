@@ -7,7 +7,17 @@ pub(crate) fn initialize_client(
     game_activity: i64,
     size: PhysicalSize<u32>,
 ) -> Result<(), String> {
-    let assets = asset_dir
+    // The engine's platform asset folder is the APK's `assets/content`
+    // directory, not the extraction root. Cordial's launcher passes this same
+    // subdirectory to MainGameActivity and App Bridge.
+    let content_dir = asset_dir.join("content");
+    if !content_dir.is_dir() {
+        return Err(format!(
+            "APK asset content directory does not exist: {}",
+            content_dir.display()
+        ));
+    }
+    let assets = content_dir
         .to_str()
         .ok_or_else(|| "asset directory path is not UTF-8".to_owned())?;
     let width = crate::host_window::dimension_i32(size.width)?;
@@ -32,6 +42,22 @@ pub(crate) fn initialize_client(
         |f| {
             // SAFETY: same conditions as the asset manager call above.
             unsafe { roblox_runtime::jni::game_activity::storage_init(f, &files, cache) }
+        },
+    )?;
+    call_native(
+        engine,
+        "Java_com_roblox_client_startup_MainGameActivity_nativeSetAssetPath",
+        |f| {
+            // SAFETY: this is the engine's exported static JNI native and the
+            // runtime's JavaVM is live. Android passes the extracted
+            // `assets/content` path here before starting App Bridge.
+            unsafe {
+                roblox_runtime::jni::game_activity::call_static_strings(
+                    f,
+                    "com/roblox/client/startup/MainGameActivity",
+                    &[assets],
+                )
+            }
         },
     )?;
     call_native(

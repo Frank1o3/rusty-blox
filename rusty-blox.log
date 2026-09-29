@@ -1,0 +1,520 @@
+   Compiling jobserver v0.1.35
+   Compiling zeroize v1.9.0
+   Compiling zlib-rs v0.6.8
+   Compiling getrandom v0.2.17
+   Compiling untrusted v0.9.0
+   Compiling bytes v1.12.1
+   Compiling httparse v1.10.1
+   Compiling base64 v0.23.1
+   Compiling subtle v2.6.1
+   Compiling rustls-pki-types v1.15.1
+   Compiling utf8-zero v0.8.1
+   Compiling cc v1.5.1
+   Compiling webpki-roots v1.0.9
+   Compiling http v1.5.0
+   Compiling cmake v0.1.58
+   Compiling ureq-proto v0.6.4
+   Compiling wayland-backend v0.3.17
+   Compiling ring v0.17.14
+   Compiling zstd-sys v2.1.0+zstd.1.5.7
+   Compiling roblox-linker v0.1.1 (/run/media/franklin/storage/Projects/roblox-runtime/crates/linker)
+   Compiling wayland-client v0.31.15
+   Compiling flate2 v1.1.10
+   Compiling wayland-csd-frame v0.3.0
+   Compiling zip v8.6.0
+   Compiling wayland-protocols v0.32.13
+   Compiling wayland-cursor v0.31.14
+   Compiling calloop-wayland-source v0.3.0
+   Compiling rustls-webpki v0.103.15
+   Compiling rustls v0.23.45
+   Compiling wayland-protocols-wlr v0.3.12
+   Compiling wayland-protocols-plasma v0.3.12
+   Compiling smithay-client-toolkit v0.19.2
+   Compiling ureq v3.4.2
+   Compiling sctk-adwaita v0.10.1
+   Compiling winit v0.30.13
+   Compiling zstd-safe v7.3.0
+   Compiling zstd v0.13.3
+   Compiling roblox-android v0.1.1 (/run/media/franklin/storage/Projects/roblox-runtime/crates/android)
+   Compiling roblox-abi v0.1.1 (/run/media/franklin/storage/Projects/roblox-runtime/crates/abi)
+   Compiling roblox-jni v0.1.1 (/run/media/franklin/storage/Projects/roblox-runtime/crates/jni)
+warning: roblox-abi@0.1.1: generated 650 stubs
+   Compiling roblox-runtime v0.1.1 (/run/media/franklin/storage/Projects/roblox-runtime)
+   Compiling rusty-blox v0.1.0 (/run/media/franklin/storage/Projects/rusty-blox)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 00s
+     Running `target/debug/rusty-blox --host-libc`
+Android system files: /home/franklin/.local/share/rusty-blox/cache/android-system
+APK assets: /home/franklin/.local/share/rusty-blox/cache/android-assets
+APK: /home/franklin/.local/share/rusty-blox/roblox/base.apk
+APK: /home/franklin/.local/share/rusty-blox/roblox/split_config.x86_64.apk
+Native libraries: /home/franklin/.local/share/rusty-blox/roblox/lib/x86_64
+Host window ready: 945x1125 (Vulkan)
+[runtime] dlopen(/home/franklin/.local/share/rusty-blox/roblox/lib/x86_64/libroblox.so) -> ok in 45275us
+[classes] Android Java compatibility classes registered
+[jni] JavaVM=0x555db40fa258 functions=0x555db40fa218 reserved0=0x555de9574c80 (expect 0x555de9574c80)
+linker: mcpelauncher_linker_notifylldb /home/franklin/.local/share/rusty-blox/roblox/lib/x86_64/libroblox.so 0x7f0a51540000
+[paths] tid=90727 access("/sys/devices/system/node/node1") = -1
+[paths] tid=85510 fopen("/dev/urandom") = ok
+[paths] tid=85510 fopen("/proc/cpuinfo") = ok
+[paths] tid=85510 open("/dev/urandom") = 10
+[paths] tid=85510 open("/dev/urandom") = 10
+[paths] tid=85510 open("/dev/urandom") = 10
+[paths] tid=85510 open("/dev/urandom") = 10
+[paths] tid=85510 fopen("/dev/urandom") = ok
+[paths] tid=85510 open("/dev/urandom") = 10
+[paths] tid=85510 open("/dev/urandom") = 11
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpufreq/stats/cpu0/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu0/cpufreq/stats/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq") = ok
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpufreq/stats/cpu1/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu1/cpufreq/stats/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu1/cpufreq/cpuinfo_max_freq") = ok
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpufreq/stats/cpu2/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu2/cpufreq/stats/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu2/cpufreq/cpuinfo_max_freq") = ok
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpufreq/stats/cpu3/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu3/cpufreq/stats/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu3/cpufreq/cpuinfo_max_freq") = ok
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpufreq/stats/cpu4/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu4/cpufreq/stats/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu4/cpufreq/cpuinfo_max_freq") = ok
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpufreq/stats/cpu5/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu5/cpufreq/stats/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu5/cpufreq/cpuinfo_max_freq") = ok
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpufreq/stats/cpu6/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu6/cpufreq/stats/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu6/cpufreq/cpuinfo_max_freq") = ok
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpufreq/stats/cpu7/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu7/cpufreq/stats/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu7/cpufreq/cpuinfo_max_freq") = ok
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpufreq/stats/cpu0/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu0/cpufreq/stats/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq") = ok
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpufreq/stats/cpu1/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu1/cpufreq/stats/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu1/cpufreq/cpuinfo_max_freq") = ok
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpufreq/stats/cpu2/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu2/cpufreq/stats/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu2/cpufreq/cpuinfo_max_freq") = ok
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpufreq/stats/cpu3/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu3/cpufreq/stats/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu3/cpufreq/cpuinfo_max_freq") = ok
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpufreq/stats/cpu4/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu4/cpufreq/stats/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu4/cpufreq/cpuinfo_max_freq") = ok
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpufreq/stats/cpu5/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu5/cpufreq/stats/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu5/cpufreq/cpuinfo_max_freq") = ok
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpufreq/stats/cpu6/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu6/cpufreq/stats/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu6/cpufreq/cpuinfo_max_freq") = ok
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpufreq/stats/cpu7/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu7/cpufreq/stats/time_in_state") = null
+[paths] tid=85510 fopen("/sys/devices/system/cpu/cpu7/cpufreq/cpuinfo_max_freq") = ok
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[jni] AttachCurrentThread(vm=0x555db40fa258) [ours]
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: FindClass com/roblox/engine/jni/locale/NativeLocaleJavaInterface
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/locale/NativeLocaleJavaInterface`, StaticMethod=`getLocale`, Signature=`()Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/locale/NativeLocaleJavaInterface`, StaticMethod=`getRobloxLocale`, Signature=`()Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/locale/NativeLocaleJavaInterface`, StaticMethod=`getGameLocale`, Signature=`()Ljava/lang/String;`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: FindClass com/roblox/engine/jni/user/NativeUserJavaInterface
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/user/NativeUserJavaInterface`, StaticMethod=`getUserId`, Signature=`()J`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/user/NativeUserJavaInterface`, StaticMethod=`getIsUnder13`, Signature=`()Z`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/user/NativeUserJavaInterface`, StaticMethod=`getUsername`, Signature=`()Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/user/NativeUserJavaInterface`, StaticMethod=`getDisplayName`, Signature=`()Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/user/NativeUserJavaInterface`, StaticMethod=`getAlternateName`, Signature=`()Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/user/NativeUserJavaInterface`, StaticMethod=`getPlatformName`, Signature=`()Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/user/NativeUserJavaInterface`, StaticMethod=`getMembershipType`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/user/NativeUserJavaInterface`, StaticMethod=`getHasRobloxSubscription`, Signature=`()Z`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/user/NativeUserJavaInterface`, StaticMethod=`getTheme`, Signature=`()Ljava/lang/String;`
+[JNIVM]: FindClass com/roblox/universalapp/logging/LoggingProtocol
+[JNIVM]: Found symbol, Class=`com/roblox/universalapp/logging/LoggingProtocol`, StaticMethod=`getProcessTimestamp`, Signature=`()J`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/universalapp/logging/LoggingProtocol` Method=`getProcessTimestamp` Signature=`()J`
+20:02:26.186 D/JNIMain                  TelemetryProtocol::setProcessTimeOverride: 0
+[JNIVM]: FindClass com/roblox/engine/jni/NativeGLJavaInterface
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`getDeviceStaticParams`, Signature=`()Lcom/roblox/engine/jni/model/DeviceStaticParams;`
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/NativeGLJavaInterface` Method=`getDeviceStaticParams` Signature=`()Lcom/roblox/engine/jni/model/DeviceStaticParams;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/model/DeviceStaticParams`, Field=`osVersion`, Signature=`Ljava/lang/String;`
+[JNIVM]: Invoked Field Getter Class=`com/roblox/engine/jni/model/DeviceStaticParams` Field=`osVersion` Signature=`Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/model/DeviceStaticParams`, Field=`deviceName`, Signature=`Ljava/lang/String;`
+[JNIVM]: Invoked Field Getter Class=`com/roblox/engine/jni/model/DeviceStaticParams` Field=`deviceName` Signature=`Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/model/DeviceStaticParams`, Field=`appVersion`, Signature=`Ljava/lang/String;`
+[JNIVM]: Invoked Field Getter Class=`com/roblox/engine/jni/model/DeviceStaticParams` Field=`appVersion` Signature=`Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/model/DeviceStaticParams`, Field=`manufacturer`, Signature=`Ljava/lang/String;`
+[JNIVM]: Invoked Field Getter Class=`com/roblox/engine/jni/model/DeviceStaticParams` Field=`manufacturer` Signature=`Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/model/DeviceStaticParams`, Field=`deviceSku`, Signature=`Ljava/lang/String;`
+[JNIVM]: Invoked Field Getter Class=`com/roblox/engine/jni/model/DeviceStaticParams` Field=`deviceSku` Signature=`Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/model/DeviceStaticParams`, Field=`appBuildVariant`, Signature=`Ljava/lang/String;`
+[JNIVM]: Invoked Field Getter Class=`com/roblox/engine/jni/model/DeviceStaticParams` Field=`appBuildVariant` Signature=`Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/model/DeviceStaticParams`, Field=`cpu64Bit`, Signature=`Z`
+[JNIVM]: Invoked Field Getter Class=`com/roblox/engine/jni/model/DeviceStaticParams` Field=`cpu64Bit` Signature=`Z`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/model/DeviceStaticParams`, Field=`socModel`, Signature=`Ljava/lang/String;`
+[JNIVM]: Invoked Field Getter Class=`com/roblox/engine/jni/model/DeviceStaticParams` Field=`socModel` Signature=`Ljava/lang/String;`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: FindClass com/snapchat/djinni/NativeObjectManager
+[JNIVM]: Constructed Unresolved symbol, Class=`java/lang/Class`, Method=`getClassLoader`, Signature=`()Ljava/lang/ClassLoader;`
+[JNIVM]: Call Unknown Member Function Class=`java/lang/Class` Method=`getClassLoader` Signature=`()Ljava/lang/ClassLoader;`
+[JNIVM]: FindClass java/lang/ClassLoader
+[JNIVM]: Found symbol, Class=`java/lang/ClassLoader`, Method=`loadClass`, Signature=`(Ljava/lang/String;)Ljava/lang/Class;`
+[JNIVM]: FindClass com/roblox/engine/jni/reporter/SessionReporterJavaInterface
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/reporter/SessionReporterJavaInterface`, StaticMethod=`getFilesDir`, Signature=`()Ljava/lang/String;`
+[JNIVM]: FindClass com/roblox/engine/jni/reporter/SessionReporterJavaInterface
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/reporter/SessionReporterJavaInterface`, StaticMethod=`setEventTrackingGoogleAnalytics`, Signature=`(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)V`
+[JNIVM]: FindClass com/roblox/engine/jni/reporter/SessionReporterJavaInterface
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/reporter/SessionReporterJavaInterface`, StaticMethod=`getAppVersion`, Signature=`()Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/reporter/SessionReporterJavaInterface`, StaticMethod=`getLastLoggedInUser`, Signature=`()Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/reporter/SessionReporterJavaInterface`, StaticMethod=`getLastLoggedInUserId`, Signature=`()Ljava/lang/String;`
+[JNIVM]: FindClass com/roblox/engine/jni/reporter/SessionReporterJavaInterface
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/reporter/SessionReporterJavaInterface`, StaticMethod=`sendSessionReport`, Signature=`(Ljava/lang/String;Ljava/lang/String;)V`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: FindClass com/roblox/audio/AppRtcDeviceWrapper
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: FindClass org/fmod/AudioDevice
+[JNIVM]: FindClass org/fmod/MediaCodec
+[JNIVM]: FindClass org/fmod/FMOD
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: FindClass com/roblox/engine/jni/video/MediaCodecInfoUtils
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/video/MediaCodecInfoUtils`, StaticMethod=`getVideoCodecs`, Signature=`()[Lcom/roblox/engine/jni/video/VideoCodecCapability;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/video/MediaCodecInfoUtils`, StaticMethod=`hevcHardwareEncodingSupported`, Signature=`(III)Z`
+[JNIVM]: FindClass com/roblox/engine/jni/NativeGLJavaInterface
+[JNIVM]: Found symbol, Class=`java/lang/Class`, Method=`getClassLoader`, Signature=`()Ljava/lang/ClassLoader;`
+[JNIVM]: Call Unknown Member Function Class=`java/lang/Class` Method=`getClassLoader` Signature=`()Ljava/lang/ClassLoader;`
+[JNIVM]: FindClass java/lang/ClassLoader
+[JNIVM]: Found symbol, Class=`java/lang/ClassLoader`, Method=`findClass`, Signature=`(Ljava/lang/String;)Ljava/lang/Class;`
+[JNIVM]: FindClass com/roblox/engine/jni/NativeGLJavaInterface
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`showKeyboard`, Signature=`(JZ[BLcom/roblox/engine/jni/model/NativeTextBoxInfo;)V`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`hideKeyboard`, Signature=`()V`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`promptNativePurchase`, Signature=`(JLjava/lang/String;Ljava/lang/String;)V`
+[JNIVM]: Constructed Unresolved symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`promptNativePurchase`, Signature=`(JLjava/lang/String;)V`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`promptNativePurchaseWithPayload`, Signature=`(JLjava/lang/String;Ljava/lang/String;)V`
+[JNIVM]: Constructed Unresolved symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`promptNativePurchaseWithPaymentSessionId`, Signature=`(JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V`
+[JNIVM]: Constructed Unresolved symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`promptNativePurchaseWithPaymentSessionId`, Signature=`(JLjava/lang/String;Ljava/lang/String;)V`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`exitGameWithError`, Signature=`(I)V`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`gameDidLeave`, Signature=`()V`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`onAppShellReloadNeeded`, Signature=`()V`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`listenToMotionEvents`, Signature=`(Ljava/lang/String;)V`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`screenOrientationChanged`, Signature=`(I)V`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`openNativeOverlay`, Signature=`(Ljava/lang/String;Ljava/lang/String;)V`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`onDataModelNotificationCallback`, Signature=`(Ljava/lang/String;Ljava/lang/String;)V`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`gameLoadedCallback`, Signature=`(J)V`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`onLuaTextBoxChangedCallback`, Signature=`(Ljava/lang/String;)V`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`onLuaTextBoxPropertyChangedCallback`, Signature=`()V`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`onAppBridgeNotification`, Signature=`(Ljava/lang/String;Ljava/lang/String;)V`
+[JNIVM]: Constructed Unresolved symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`onExtendedAnalyticsRecvCallback`, Signature=`([BI)V`
+[JNIVM]: Constructed Unresolved symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`saveImageToAlbum`, Signature=`(Ljava/lang/String;)V`
+[JNIVM]: Constructed Unresolved symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`onVrSessionStateUpdate`, Signature=`(I)V`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`getWebViewUserAgent`, Signature=`()V`
+[JNIVM]: Constructed Unresolved symbol, Class=`com/roblox/engine/jni/NativeGLJavaInterface`, StaticMethod=`getMobileAdvertisingId`, Signature=`()V`
+[JNIVM]: FindClass com/roblox/engine/jni/util/NetworkUtils
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/util/NetworkUtils`, StaticMethod=`getPublicIPv4Addresseses`, Signature=`()Ljava/lang/String;`
+[JNIVM]: FindClass com/roblox/engine/jni/memstorage/Connection
+[JNIVM]: FindClass com/roblox/universalapp/messagebus/Connection
+[JNIVM]: FindClass com/roblox/engine/jni/model/NativeTextBoxInfo
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: FindClass org/webrtc/voiceengine/WebRtcAudioManager
+JNI_OnLoad returned 0x10006
+[runtime] client settings: 1367264 bytes (Roblox settings CDN)
+20:02:26.580 D/GameActivity             GameActivity_register
+[JNIVM]: FindClass com/google/androidgamesdk/GameActivity
+[JNIVM]: Constructed Unresolved symbol, Class=`com/google/androidgamesdk/GameActivity`, Method=`finish`, Signature=`()V`
+[JNIVM]: Found symbol, Class=`com/google/androidgamesdk/GameActivity`, Method=`setWindowFlags`, Signature=`(II)V`
+[JNIVM]: Constructed Unresolved symbol, Class=`com/google/androidgamesdk/GameActivity`, Method=`getWindowInsets`, Signature=`(I)Landroidx/core/graphics/Insets;`
+[JNIVM]: Found symbol, Class=`com/google/androidgamesdk/GameActivity`, Method=`getWaterfallInsets`, Signature=`()Landroidx/core/graphics/Insets;`
+[JNIVM]: Found symbol, Class=`com/google/androidgamesdk/GameActivity`, Method=`setImeEditorInfoFields`, Signature=`(III)V`
+[JNIVM]: FindClass androidx/core/graphics/Insets
+[JNIVM]: Found symbol, Class=`androidx/core/graphics/Insets`, Field=`left`, Signature=`I`
+[JNIVM]: Found symbol, Class=`androidx/core/graphics/Insets`, Field=`right`, Signature=`I`
+[JNIVM]: Found symbol, Class=`androidx/core/graphics/Insets`, Field=`top`, Signature=`I`
+[JNIVM]: Found symbol, Class=`androidx/core/graphics/Insets`, Field=`bottom`, Signature=`I`
+[JNIVM]: FindClass android/content/res/Configuration
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Field=`colorMode`, Signature=`I`
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Field=`densityDpi`, Signature=`I`
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Field=`fontScale`, Signature=`F`
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Field=`fontWeightAdjustment`, Signature=`I`
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Field=`hardKeyboardHidden`, Signature=`I`
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Field=`keyboard`, Signature=`I`
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Field=`keyboardHidden`, Signature=`I`
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Field=`mcc`, Signature=`I`
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Field=`mnc`, Signature=`I`
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Field=`navigation`, Signature=`I`
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Field=`navigationHidden`, Signature=`I`
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Field=`orientation`, Signature=`I`
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Field=`screenHeightDp`, Signature=`I`
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Field=`screenLayout`, Signature=`I`
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Field=`screenWidthDp`, Signature=`I`
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Field=`smallestScreenWidthDp`, Signature=`I`
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Field=`touchscreen`, Signature=`I`
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Field=`uiMode`, Signature=`I`
+[JNIVM]: Found symbol, Class=`android/content/res/Configuration`, Method=`getLocales`, Signature=`()Landroid/os/LocaleList;`
+[JNIVM]: FindClass android/os/LocaleList
+[JNIVM]: Found symbol, Class=`android/os/LocaleList`, Method=`size`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/os/LocaleList`, Method=`get`, Signature=`(I)Ljava/util/Locale;`
+[JNIVM]: FindClass java/util/Locale
+[JNIVM]: Found symbol, Class=`java/util/Locale`, Method=`getLanguage`, Signature=`()Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`java/util/Locale`, Method=`getScript`, Signature=`()Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`java/util/Locale`, Method=`getCountry`, Signature=`()Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`java/util/Locale`, Method=`getVariant`, Signature=`()Ljava/lang/String;`
+[JNIVM]: FindClass androidx/core/view/WindowInsetsCompat$Type
+[JNIVM]: Found symbol, Class=`androidx/core/view/WindowInsetsCompat$Type`, StaticMethod=`captionBar`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`androidx/core/view/WindowInsetsCompat$Type`, StaticMethod=`displayCutout`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`androidx/core/view/WindowInsetsCompat$Type`, StaticMethod=`ime`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`androidx/core/view/WindowInsetsCompat$Type`, StaticMethod=`mandatorySystemGestures`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`androidx/core/view/WindowInsetsCompat$Type`, StaticMethod=`navigationBars`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`androidx/core/view/WindowInsetsCompat$Type`, StaticMethod=`statusBars`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`androidx/core/view/WindowInsetsCompat$Type`, StaticMethod=`systemBars`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`androidx/core/view/WindowInsetsCompat$Type`, StaticMethod=`systemGestures`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`androidx/core/view/WindowInsetsCompat$Type`, StaticMethod=`tappableElement`, Signature=`()I`
+[JNIVM]: FindClass android/view/MotionEvent
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getDeviceId`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getSource`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getAction`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getEventTime`, Signature=`()J`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getDownTime`, Signature=`()J`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getFlags`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getMetaState`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getActionButton`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getButtonState`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getClassification`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getEdgeFlags`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getHistorySize`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getHistoricalEventTime`, Signature=`(I)J`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getPointerCount`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getPointerId`, Signature=`(I)I`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getToolType`, Signature=`(I)I`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getRawX`, Signature=`(I)F`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getRawY`, Signature=`(I)F`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getXPrecision`, Signature=`()F`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getYPrecision`, Signature=`()F`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getAxisValue`, Signature=`(II)F`
+[JNIVM]: Found symbol, Class=`android/view/MotionEvent`, Method=`getHistoricalAxisValue`, Signature=`(III)F`
+[JNIVM]: FindClass android/view/KeyEvent
+[JNIVM]: Found symbol, Class=`android/view/KeyEvent`, Method=`getDeviceId`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/KeyEvent`, Method=`getSource`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/KeyEvent`, Method=`getAction`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/KeyEvent`, Method=`getEventTime`, Signature=`()J`
+[JNIVM]: Found symbol, Class=`android/view/KeyEvent`, Method=`getDownTime`, Signature=`()J`
+[JNIVM]: Found symbol, Class=`android/view/KeyEvent`, Method=`getFlags`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/KeyEvent`, Method=`getMetaState`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/KeyEvent`, Method=`getModifiers`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/KeyEvent`, Method=`getRepeatCount`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/KeyEvent`, Method=`getKeyCode`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/KeyEvent`, Method=`getScanCode`, Signature=`()I`
+[JNIVM]: Found symbol, Class=`android/view/KeyEvent`, Method=`getUnicodeChar`, Signature=`()I`
+[JNIVM]: FindClass com/google/androidgamesdk/GameActivity
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: initializeNativeCode signature: (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Landroid/content/res/AssetManager;[BLandroid/content/res/Configuration;)J
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: getDlError signature: ()Ljava/lang/String;
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: terminateNativeCode signature: (J)V
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onStartNative signature: (J)V
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onResumeNative signature: (J)V
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onSaveInstanceStateNative signature: (J)[B
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onPauseNative signature: (J)V
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onStopNative signature: (J)V
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onConfigurationChangedNative signature: (JLandroid/content/res/Configuration;)V
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onTrimMemoryNative signature: (JI)V
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onWindowFocusChangedNative signature: (JZ)V
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onSurfaceCreatedNative signature: (JLandroid/view/Surface;)V
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onSurfaceChangedNative signature: (JLandroid/view/Surface;III)V
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onSurfaceRedrawNeededNative signature: (JLandroid/view/Surface;)V
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onSurfaceDestroyedNative signature: (J)V
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onTouchEventNative signature: (JLandroid/view/MotionEvent;IIIIIJJIIIIIIFF)Z
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onKeyDownNative signature: (JLandroid/view/KeyEvent;)Z
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onKeyUpNative signature: (JLandroid/view/KeyEvent;)Z
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onTextInputEventNative signature: (JLcom/google/androidgamesdk/gametextinput/State;)V
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onWindowInsetsChangedNative signature: (J)V
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: setInputConnectionNative signature: (JLcom/google/androidgamesdk/gametextinput/InputConnection;)V
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onContentRectChangedNative signature: (JIIII)V
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onSoftwareKeyboardVisibilityChangedNative signature: (JZ)V
+[JNIVM]: Class "com/google/androidgamesdk/GameActivity" registred native method: onEditorActionNative signature: (JI)V
+20:02:26.581 D/GameActivity             SDK version: 33
+[JNIVM]: Invoked Field Getter Class=`android/content/res/Configuration` Field=`colorMode` Signature=`I`
+[JNIVM]: Invoked Field Getter Class=`android/content/res/Configuration` Field=`densityDpi` Signature=`I`
+[JNIVM]: Invoked Field Getter Class=`android/content/res/Configuration` Field=`fontScale` Signature=`F`
+[JNIVM]: Invoked Field Getter Class=`android/content/res/Configuration` Field=`fontWeightAdjustment` Signature=`I`
+[JNIVM]: Invoked Field Getter Class=`android/content/res/Configuration` Field=`hardKeyboardHidden` Signature=`I`
+[JNIVM]: Invoked Field Getter Class=`android/content/res/Configuration` Field=`keyboard` Signature=`I`
+[JNIVM]: Invoked Field Getter Class=`android/content/res/Configuration` Field=`keyboardHidden` Signature=`I`
+[JNIVM]: Invoked Field Getter Class=`android/content/res/Configuration` Field=`mcc` Signature=`I`
+[JNIVM]: Invoked Field Getter Class=`android/content/res/Configuration` Field=`mnc` Signature=`I`
+[JNIVM]: Invoked Field Getter Class=`android/content/res/Configuration` Field=`navigation` Signature=`I`
+[JNIVM]: Invoked Field Getter Class=`android/content/res/Configuration` Field=`navigationHidden` Signature=`I`
+[JNIVM]: Invoked Field Getter Class=`android/content/res/Configuration` Field=`orientation` Signature=`I`
+[JNIVM]: Invoked Field Getter Class=`android/content/res/Configuration` Field=`screenHeightDp` Signature=`I`
+[JNIVM]: Invoked Field Getter Class=`android/content/res/Configuration` Field=`screenLayout` Signature=`I`
+[JNIVM]: Invoked Field Getter Class=`android/content/res/Configuration` Field=`screenWidthDp` Signature=`I`
+[JNIVM]: Invoked Field Getter Class=`android/content/res/Configuration` Field=`smallestScreenWidthDp` Signature=`I`
+[JNIVM]: Invoked Field Getter Class=`android/content/res/Configuration` Field=`touchscreen` Signature=`I`
+[JNIVM]: Invoked Field Getter Class=`android/content/res/Configuration` Field=`uiMode` Signature=`I`
+[JNIVM]: Call Member Function Class=`android/content/res/Configuration` Method=`getLocales` Signature=`()Landroid/os/LocaleList;`
+[JNIVM]: Call Member Function Class=`android/os/LocaleList` Method=`size` Signature=`()I`
+[JNIVM]: Call Member Function Class=`android/os/LocaleList` Method=`get` Signature=`(I)Ljava/util/Locale;`
+[JNIVM]: Call Member Function Class=`java/util/Locale` Method=`getLanguage` Signature=`()Ljava/lang/String;`
+[JNIVM]: Call Member Function Class=`java/util/Locale` Method=`getScript` Signature=`()Ljava/lang/String;`
+[JNIVM]: Call Member Function Class=`java/util/Locale` Method=`getCountry` Signature=`()Ljava/lang/String;`
+[JNIVM]: Call Member Function Class=`java/util/Locale` Method=`getVariant` Signature=`()Ljava/lang/String;`
+[JNIVM]: FindClass com/google/androidgamesdk/gametextinput/State
+[JNIVM]: FindClass com/google/androidgamesdk/gametextinput/InputConnection
+[JNIVM]: Found symbol, Class=`com/google/androidgamesdk/gametextinput/InputConnection`, Method=`setState`, Signature=`(Lcom/google/androidgamesdk/gametextinput/State;)V`
+[JNIVM]: Found symbol, Class=`com/google/androidgamesdk/gametextinput/InputConnection`, Method=`setSoftKeyboardActive`, Signature=`(ZI)V`
+[JNIVM]: Found symbol, Class=`com/google/androidgamesdk/gametextinput/InputConnection`, Method=`restartInput`, Signature=`()V`
+[JNIVM]: Found symbol, Class=`com/google/androidgamesdk/gametextinput/State`, Field=`text`, Signature=`Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/google/androidgamesdk/gametextinput/State`, Field=`selectionStart`, Signature=`I`
+[JNIVM]: Found symbol, Class=`com/google/androidgamesdk/gametextinput/State`, Field=`selectionEnd`, Signature=`I`
+[JNIVM]: Found symbol, Class=`com/google/androidgamesdk/gametextinput/State`, Field=`composingRegionStart`, Signature=`I`
+[JNIVM]: Found symbol, Class=`com/google/androidgamesdk/gametextinput/State`, Field=`composingRegionEnd`, Signature=`I`
+GameActivity initialized; handle=139681214911232
+[JNIVM]: FindClass com/roblox/client/LocalStorageManager
+[JNIVM]: Found symbol, Class=`com/roblox/client/LocalStorageManager`, Method=`getAllocatableBytes`, Signature=`()J`
+[paths] tid=85510 stat("/home/franklin/.local/share/rusty-blox/cache/android-assets") = 0
+[paths] tid=85510 lstat("/") = 0
+[paths] tid=85510 lstat("/home") = 0
+[paths] tid=85510 lstat("/home/franklin") = 0
+[paths] tid=85510 lstat("/home/franklin/.local") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share/rusty-blox") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share/rusty-blox/cache") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share/rusty-blox/cache/android-assets") = 0
+[paths] tid=85510 stat("/home/franklin/.local/share/rusty-blox/cache/android-assets/content") = 0
+[paths] tid=85510 stat("/home/franklin/.local/share/rusty-blox/cache/android-assets/content") = 0
+[paths] tid=85510 stat("/home/franklin/.local/share/rusty-blox/cache/android-assets/content/") = 0
+[paths] tid=85510 lstat("/") = 0
+[paths] tid=85510 lstat("/home") = 0
+[paths] tid=85510 lstat("/home/franklin") = 0
+[paths] tid=85510 lstat("/home/franklin/.local") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share/rusty-blox") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share/rusty-blox/cache") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share/rusty-blox/cache/android-assets") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share/rusty-blox/cache/android-assets/content") = 0
+[paths] tid=85510 stat("/home/franklin/.local/share/rusty-blox/cache/android-assets/android") = 0
+[paths] tid=85510 lstat("/") = 0
+[paths] tid=85510 lstat("/home") = 0
+[paths] tid=85510 lstat("/home/franklin") = 0
+[paths] tid=85510 lstat("/home/franklin/.local") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share/rusty-blox") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share/rusty-blox/cache") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share/rusty-blox/cache/android-assets") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share/rusty-blox/cache/android-assets/android") = 0
+[paths] tid=85510 stat("/home/franklin/.local/share/rusty-blox/cache/android-assets/ExtraContent/") = 0
+[paths] tid=85510 stat("/home/franklin/.local/share/rusty-blox/cache/android-assets/ExtraContent/") = 0
+[paths] tid=85510 lstat("/") = 0
+[paths] tid=85510 lstat("/home") = 0
+[paths] tid=85510 lstat("/home/franklin") = 0
+[paths] tid=85510 lstat("/home/franklin/.local") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share/rusty-blox") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share/rusty-blox/cache") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share/rusty-blox/cache/android-assets") = 0
+[paths] tid=85510 lstat("/home/franklin/.local/share/rusty-blox/cache/android-assets/ExtraContent") = 0
+[paths] tid=85510 stat("/home/franklin/.local/share/rusty-blox/cache/android-assets/StudioContent/") = -1
+[runtime] device identity: pc-windows-11 (isTablet=false, platform=Windows, User-Agent: Mozilla/5.0 (7820MB; 945x1125; 160x160; 945x1125; Cordial) AppleWebKit/537.36 (KHTML, like Gecko)  ROBLOX Windows App 0.0.0 Desktop Hybrid()  Cordial RobloxApp/0.0.0 (GlobalDist; Cordial))
+[android] host touchscreen: no (no display backend reported a seat)
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/autovalue/InitParams`, Method=`baseURL`, Signature=`()Ljava/lang/String;`
+[JNIVM]: Call Member Function Class=`com/roblox/engine/jni/autovalue/InitParams` Method=`baseURL` Signature=`()Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/autovalue/InitParams`, Method=`userAgent`, Signature=`()Ljava/lang/String;`
+[JNIVM]: Call Member Function Class=`com/roblox/engine/jni/autovalue/InitParams` Method=`userAgent` Signature=`()Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/autovalue/InitParams`, Method=`platformParams`, Signature=`()Lcom/roblox/engine/jni/model/PlatformParams;`
+[JNIVM]: Call Member Function Class=`com/roblox/engine/jni/autovalue/InitParams` Method=`platformParams` Signature=`()Lcom/roblox/engine/jni/model/PlatformParams;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/autovalue/InitParams`, Method=`isTablet`, Signature=`()Z`
+[JNIVM]: Call Member Function Class=`com/roblox/engine/jni/autovalue/InitParams` Method=`isTablet` Signature=`()Z`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/autovalue/InitParams`, Method=`isVrDevice`, Signature=`()Z`
+[JNIVM]: Call Member Function Class=`com/roblox/engine/jni/autovalue/InitParams` Method=`isVrDevice` Signature=`()Z`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/model/PlatformParams`, Field=`assetFolderPath`, Signature=`Ljava/lang/String;`
+[JNIVM]: Invoked Field Getter Class=`com/roblox/engine/jni/model/PlatformParams` Field=`assetFolderPath` Signature=`Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/model/PlatformParams`, Field=`dpiScale`, Signature=`F`
+[JNIVM]: Invoked Field Getter Class=`com/roblox/engine/jni/model/PlatformParams` Field=`dpiScale` Signature=`F`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/model/PlatformParams`, Field=`isTouchDevice`, Signature=`Z`
+[JNIVM]: Invoked Field Getter Class=`com/roblox/engine/jni/model/PlatformParams` Field=`isTouchDevice` Signature=`Z`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/locale/NativeLocaleJavaInterface` Method=`getLocale` Signature=`()Ljava/lang/String;`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/user/NativeUserJavaInterface` Method=`getUserId` Signature=`()J`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/user/NativeUserJavaInterface` Method=`getIsUnder13` Signature=`()Z`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/user/NativeUserJavaInterface` Method=`getUsername` Signature=`()Ljava/lang/String;`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/user/NativeUserJavaInterface` Method=`getDisplayName` Signature=`()Ljava/lang/String;`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/user/NativeUserJavaInterface` Method=`getAlternateName` Signature=`()Ljava/lang/String;`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/user/NativeUserJavaInterface` Method=`getPlatformName` Signature=`()Ljava/lang/String;`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/user/NativeUserJavaInterface` Method=`getMembershipType` Signature=`()I`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/user/NativeUserJavaInterface` Method=`getHasRobloxSubscription` Signature=`()Z`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/locale/NativeLocaleJavaInterface` Method=`getRobloxLocale` Signature=`()Ljava/lang/String;`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/locale/NativeLocaleJavaInterface` Method=`getGameLocale` Signature=`()Ljava/lang/String;`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/user/NativeUserJavaInterface` Method=`getTheme` Signature=`()Ljava/lang/String;`
+[jni] AttachCurrentThread(vm=0x555db40fa258) [ours]
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Found symbol, Class=`com/google/androidgamesdk/GameActivity`, Method=`getResources`, Signature=`()Landroid/content/res/Resources;`
+[JNIVM]: Call Member Function Class=`com/google/androidgamesdk/GameActivity` Method=`getResources` Signature=`()Landroid/content/res/Resources;`
+[JNIVM]: Found symbol, Class=`android/content/res/Resources`, Method=`getDisplayMetrics`, Signature=`()Landroid/util/DisplayMetrics;`
+[JNIVM]: Call Member Function Class=`android/content/res/Resources` Method=`getDisplayMetrics` Signature=`()Landroid/util/DisplayMetrics;`
+[JNIVM]: Found symbol, Class=`android/util/DisplayMetrics`, Field=`density`, Signature=`F`
+[JNIVM]: Invoked Field Getter Class=`android/util/DisplayMetrics` Field=`density` Signature=`F`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Found symbol, Class=`com/google/androidgamesdk/GameActivity`, Method=`getNativeHelper`, Signature=`()Lcom/roblox/client/startup/NativeHelper;`
+[JNIVM]: Call Member Function Class=`com/google/androidgamesdk/GameActivity` Method=`getNativeHelper` Signature=`()Lcom/roblox/client/startup/NativeHelper;`
+[paths] tid=90739 stat("./appData/logs") = 0
+[paths] tid=90739 stat("./appData/logs") = 0
+[paths] tid=90739 fopen("./appData/logs/2.737.0.1584_20260929T000226Z_Player_0cf19_last.log") = ok
+[paths] tid=90739 stat("./exe/ssl/cacert.pem") = -1
+[runtime] device identity: pc-windows-11 (isTablet=false, platform=Windows, User-Agent: Mozilla/5.0 (7820MB; 945x1125; 160x160; 945x1125; Cordial) AppleWebKit/537.36 (KHTML, like Gecko)  ROBLOX Windows App 0.0.0 Desktop Hybrid()  Cordial RobloxApp/0.0.0 (GlobalDist; Cordial))
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/autovalue/InitParams`, Method=`baseURL`, Signature=`()Ljava/lang/String;`
+[JNIVM]: Call Member Function Class=`com/roblox/engine/jni/autovalue/InitParams` Method=`baseURL` Signature=`()Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/autovalue/InitParams`, Method=`userAgent`, Signature=`()Ljava/lang/String;`
+[JNIVM]: Call Member Function Class=`com/roblox/engine/jni/autovalue/InitParams` Method=`userAgent` Signature=`()Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/autovalue/InitParams`, Method=`platformParams`, Signature=`()Lcom/roblox/engine/jni/model/PlatformParams;`
+[JNIVM]: Call Member Function Class=`com/roblox/engine/jni/autovalue/InitParams` Method=`platformParams` Signature=`()Lcom/roblox/engine/jni/model/PlatformParams;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/autovalue/InitParams`, Method=`isTablet`, Signature=`()Z`
+[JNIVM]: Call Member Function Class=`com/roblox/engine/jni/autovalue/InitParams` Method=`isTablet` Signature=`()Z`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/autovalue/InitParams`, Method=`isVrDevice`, Signature=`()Z`
+[JNIVM]: Call Member Function Class=`com/roblox/engine/jni/autovalue/InitParams` Method=`isVrDevice` Signature=`()Z`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/model/PlatformParams`, Field=`assetFolderPath`, Signature=`Ljava/lang/String;`
+[JNIVM]: Invoked Field Getter Class=`com/roblox/engine/jni/model/PlatformParams` Field=`assetFolderPath` Signature=`Ljava/lang/String;`
+[JNIVM]: Found symbol, Class=`com/roblox/engine/jni/model/PlatformParams`, Field=`dpiScale`, Signature=`F`
+[JNIVM]: Invoked Field Getter Class=`com/roblox/engine/jni/model/PlatformParams` Field=`dpiScale` Signature=`F`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/locale/NativeLocaleJavaInterface` Method=`getLocale` Signature=`()Ljava/lang/String;`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/user/NativeUserJavaInterface` Method=`getUserId` Signature=`()J`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/user/NativeUserJavaInterface` Method=`getIsUnder13` Signature=`()Z`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/user/NativeUserJavaInterface` Method=`getUsername` Signature=`()Ljava/lang/String;`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/user/NativeUserJavaInterface` Method=`getDisplayName` Signature=`()Ljava/lang/String;`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/user/NativeUserJavaInterface` Method=`getAlternateName` Signature=`()Ljava/lang/String;`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/user/NativeUserJavaInterface` Method=`getPlatformName` Signature=`()Ljava/lang/String;`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/user/NativeUserJavaInterface` Method=`getMembershipType` Signature=`()I`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/user/NativeUserJavaInterface` Method=`getHasRobloxSubscription` Signature=`()Z`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/locale/NativeLocaleJavaInterface` Method=`getRobloxLocale` Signature=`()Ljava/lang/String;`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/locale/NativeLocaleJavaInterface` Method=`getGameLocale` Signature=`()Ljava/lang/String;`
+[jni] GetEnv(vm=0x555db40fa258) [ours]
+[JNIVM]: Call Static Function Class=`com/roblox/engine/jni/user/NativeUserJavaInterface` Method=`getTheme` Signature=`()Ljava/lang/String;`
+[paths] tid=90739 stat("./appData") = 0
+[paths] tid=90739 fopen("./appData/AnalysticsSettings.xml") = ok
+[paths] tid=90740 stat("./appData/LocalStorage") = 0
+[paths] tid=90740 fopen("./appData/LocalStorage/_appStorage.json") = null
+[paths] tid=90739 stat("./appData") = 0
+[paths] tid=90739 fopen("./appData/GlobalBasicSettings_13.xml") = null
+[paths] tid=90739 stat("./appData/LocalStorage") = 0
+[paths] tid=90739 stat("./appData/LocalStorage") = 0
+[paths] tid=90739 opendir("./appData/LocalStorage") = ok
+RBXCRASH: FatalRuntimeError (Can't initialize the TaskScheduler before flags have been loaded)

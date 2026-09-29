@@ -6,6 +6,8 @@
 [dependencies]
     libloading="0.9.0"
     roblox-runtime={path="../roblox-runtime"}
-    serde_json="1.0.151"
-    winit="0.30.13"
-    zip={version="8.6.0", default-features=false, features=["deflate"]}
+serde_json="1.0.151"
+ureq="3.3.0"
+winit="0.30.13"
+zstd="0.13"
+zip={version="8.6.0", default-features=false, features=["deflate"]}
