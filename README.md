@@ -46,3 +46,6 @@ This backend has initialized JNI and GameActivity in an observed run, but it
 has not yet been shown to reach a usable Roblox session; keep it unset for
 normal use. In fish, `set -gx USE_EXPERIMENTAL_JNIVM 1` enables it for later
 commands in that shell, and `set -e USE_EXPERIMENTAL_JNIVM` turns it off.
+For development, `./dev.sh` runs `cargo run -- --host-libc` with the
+experimental VM enabled and replaces `rusty-blox.log` with that run's combined
+output while also showing it in the terminal.

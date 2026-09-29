@@ -173,7 +173,7 @@ impl ClientApp {
             return Err("prepare Android looper for the GameActivity thread failed".into());
         }
         let game_activity = engine
-            .initialize_game_activity(&internal, &internal, &external)
+            .initialize_game_activity(&internal, &internal, &external, size.width, size.height)
             .map_err(|error| format!("initialize GameActivity: {error}"))?;
         println!("GameActivity initialized; handle={game_activity}");
         crate::startup::initialize_client(&engine, &config, &self.asset_dir, game_activity, size)?;
