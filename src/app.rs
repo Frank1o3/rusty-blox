@@ -278,7 +278,9 @@ impl winit::application::ApplicationHandler for ClientApp {
                             let characters = text
                                 .map(|text| text.chars().filter(|ch| !ch.is_control()).count())
                                 .unwrap_or(0);
-                            eprintln!("[input] focused text key; printable characters={characters}");
+                            eprintln!(
+                                "[input] focused text key; printable characters={characters}"
+                            );
                         }
                         if let Some(text) = text {
                             let printable: String = text

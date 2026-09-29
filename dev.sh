@@ -5,7 +5,7 @@ cd "$(dirname "$(realpath "$0")")"
 log_file="$PWD/rusty-blox.log"
 
 set +e
-USE_EXPERIMENTAL_JNIVM=1 cargo run -- --host-libc "$@" 2>&1 | tee "$log_file"
+USE_EXPERIMENTAL_JNIVM=1 RBX_RUNTIME_TRACE_TEXT=1 cargo run -- --host-libc "$@" 2>&1 | tee "$log_file"
 status=${PIPESTATUS[0]}
 set -e
 exit "$status"
