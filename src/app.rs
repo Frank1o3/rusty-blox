@@ -264,6 +264,19 @@ impl winit::application::ApplicationHandler for ClientApp {
                 if let PhysicalKey::Code(code) = event.physical_key {
                     if event.state == ElementState::Pressed {
                         self.editing_key(code);
+                        // `Ime::Commit` covers composed input, but winit's
+                        // ordinary key events also carry printable text. On
+                        // desktop keyboard layouts that don't activate an IME,
+                        // relying on `Ime::Commit` alone leaves Roblox's text
+                        // box with no characters (the corresponding game key
+                        // is intentionally suppressed below).
+                        if let Some(text) = event.text.as_deref() {
+                            let printable: String = text
+                                .chars()
+                                .filter(|character| !character.is_control())
+                                .collect();
+                            self.commit_text(&printable);
+                        }
                     }
                     if let (Some(key_code), Some(evdev_code)) =
                         (android_key_code(code), evdev_key_code(code))
