@@ -1095,7 +1095,7 @@ dependencies = [
 
 [[package]]
 name = "jnivm"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "jni-sys 0.4.1",
 ]
@@ -1688,14 +1688,14 @@ dependencies = [
 
 [[package]]
 name = "roblox-abi"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "roblox-linker",
 ]
 
 [[package]]
 name = "roblox-android"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "roblox-linker",
  "serde_json",
@@ -1704,28 +1704,28 @@ dependencies = [
 
 [[package]]
 name = "roblox-graphics-vulkan"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "ash",
 ]
 
 [[package]]
 name = "roblox-jni"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "roblox-linker",
 ]
 
 [[package]]
 name = "roblox-linker"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "cmake",
 ]
 
 [[package]]
 name = "roblox-runtime"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "jnivm",
  "roblox-abi",
