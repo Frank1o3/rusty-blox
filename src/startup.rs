@@ -95,7 +95,9 @@ pub(crate) fn initialize_client(
         },
     )?;
 
-    crate::session::restore(engine, config)?;
+    if let Some(session) = &config.session {
+        roblox_runtime::session::restore(engine, session.directory())?;
+    }
 
     call_native(
         engine,

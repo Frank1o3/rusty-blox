@@ -12,6 +12,7 @@ pub(crate) struct ClientApp {
     config: Option<roblox_runtime::RuntimeConfig>,
     asset_dir: PathBuf,
     data_dir: PathBuf,
+    session_dir: Option<PathBuf>,
     window: Option<Window>,
     surface_owner: Option<SurfaceOwner>,
     engine: Option<roblox_runtime::LoadedEngine>,
@@ -52,10 +53,15 @@ impl ClientApp {
         settings: crate::settings::Settings,
     ) -> Self {
         let data_dir = config.data_dir.clone();
+        let session_dir = config
+            .session
+            .as_ref()
+            .map(|session| session.directory().to_path_buf());
         Self {
             config: Some(config),
             asset_dir,
             data_dir,
+            session_dir,
             window: None,
             surface_owner: None,
             engine: None,
@@ -179,8 +185,10 @@ impl ClientApp {
 impl Drop for ClientApp {
     fn drop(&mut self) {
         if let Some(engine) = &self.engine {
-            if let Err(error) = crate::session::save(engine, &self.data_dir) {
-                eprintln!("rusty-blox: could not save Roblox session: {error}");
+            if let Some(session_dir) = &self.session_dir {
+                if let Err(error) = roblox_runtime::session::save(engine, session_dir) {
+                    eprintln!("rusty-blox: could not save Roblox session: {error}");
+                }
             }
         }
         roblox_runtime::graphics::clear_surface();
@@ -294,7 +302,9 @@ impl winit::application::ApplicationHandler for ClientApp {
             self.refresh_text_focus();
             self.sync_cursor_lock();
             if let Some(engine) = &self.engine {
-                crate::session::flush_if_due(engine, &self.data_dir);
+                if let Some(session_dir) = &self.session_dir {
+                    roblox_runtime::session::flush_if_due(engine, session_dir);
+                }
             }
         }
         event_loop.set_control_flow(ControlFlow::WaitUntil(

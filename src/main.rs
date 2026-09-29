@@ -3,7 +3,6 @@ mod client;
 mod client_settings;
 mod desktop;
 mod host_window;
-mod session;
 mod settings;
 mod startup;
 
@@ -24,18 +23,28 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut client_settings = None;
     let mut host_libc = false;
     let mut settings_mode = false;
+    let mut session_name: Option<String> = None;
     while let Some(arg) = args.next() {
         match arg.to_str() {
             Some("--help" | "-h") => {
                 println!(
-                    "Usage: rusty-blox [--settings] [--host-libc] [--fast-flags FILE] [--client-settings FILE] [APK]\n\
+                    "Usage: rusty-blox [--settings] [--session NAME|--add-session NAME] [--host-libc] [--fast-flags FILE] [--client-settings FILE] [APK]\n\
                      Without APK, the client looks for Sober's x86-64 installation.\n\
+                     Without --session, Roblox starts without a saved login. --add-session NAME creates/selects a named login profile.\n\
                      --host-libc enables the runtime's ABI-unsafe diagnostic resolver."
                 );
                 return Ok(());
             }
             Some("--host-libc") => host_libc = true,
             Some("--settings") => settings_mode = true,
+            Some("--session") | Some("--add-session") => {
+                session_name = Some(
+                    args.next()
+                        .ok_or("--session needs a name")?
+                        .to_string_lossy()
+                        .into_owned(),
+                );
+            }
             Some("--fast-flags") => {
                 fast_flags_path = Some(PathBuf::from(
                     args.next().ok_or("--fast-flags needs a path")?,
@@ -56,6 +65,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if settings_mode {
         return settings::run_ui().map_err(Into::into);
     }
+    let lock_root = client::managed_install_dir().ok_or("HOME and XDG_DATA_HOME are unset")?;
+    std::fs::create_dir_all(&lock_root)?;
+    let _instance_lock = InstanceLock::acquire(&lock_root.join("roblox-instance.lock"))?;
     let user_settings = settings::load();
     let fast_flags = if let Some(path) = fast_flags_path {
         serde_json::from_slice(&std::fs::read(path)?)?
@@ -119,6 +131,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             host_libc,
             ..Default::default()
         },
+        session: session_name
+            .as_deref()
+            .map(|name| {
+                roblox_runtime::session::Session::open(&client_root.join("sessions"), name)
+                    .map_err(std::io::Error::other)
+            })
+            .transpose()?,
     };
     let system_dir = config.prepare_android_environment()?;
     let asset_dir = config.prepare_asset_tree()?;
@@ -138,4 +157,36 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Err(error.into());
     }
     Ok(())
+}
+
+struct InstanceLock(std::path::PathBuf);
+impl InstanceLock {
+    fn acquire(path: &std::path::Path) -> Result<Self, Box<dyn std::error::Error>> {
+        use std::io::Write;
+        let mut file = match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                let pid = std::fs::read_to_string(path)
+                    .ok()
+                    .and_then(|s| s.trim().parse::<u32>().ok());
+                if pid.is_some_and(|pid| !std::path::Path::new(&format!("/proc/{pid}")).exists()) {
+                    let _ = std::fs::remove_file(path);
+                    return Self::acquire(path);
+                }
+                return Err("a rusty-blox Roblox instance is already running".into());
+            }
+            Err(error) => return Err(format!("create Roblox instance lock: {error}").into()),
+        };
+        writeln!(file, "{}", std::process::id())?;
+        Ok(Self(path.to_path_buf()))
+    }
+}
+impl Drop for InstanceLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
 }
