@@ -1094,6 +1094,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "jnivm"
+version = "0.1.1"
+dependencies = [
+ "jni-sys 0.4.1",
+]
+
+[[package]]
 name = "jobserver"
 version = "0.1.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1720,6 +1727,7 @@ dependencies = [
 name = "roblox-runtime"
 version = "0.1.1"
 dependencies = [
+ "jnivm",
  "roblox-abi",
  "roblox-android",
  "roblox-graphics-vulkan",
