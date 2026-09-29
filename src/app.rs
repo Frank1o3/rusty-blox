@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::host_window::SurfaceOwner;
 use winit::dpi::PhysicalSize;
-use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::{DeviceEvent, ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::window::{CursorGrabMode, Window, WindowId};
@@ -10,6 +10,7 @@ use winit::window::{CursorGrabMode, Window, WindowId};
 pub(crate) struct ClientApp {
     config: Option<roblox_runtime::RuntimeConfig>,
     asset_dir: PathBuf,
+    data_dir: PathBuf,
     window: Option<Window>,
     surface_owner: Option<SurfaceOwner>,
     engine: Option<roblox_runtime::LoadedEngine>,
@@ -21,10 +22,28 @@ pub(crate) struct ClientApp {
 }
 
 impl ClientApp {
+    fn forward_locked_mouse_move(&self, position: (f32, f32), delta: (f32, f32)) {
+        let Some(native) = self.engine.as_ref().and_then(|engine| {
+            engine.symbol("Java_com_roblox_engine_jni_NativeInputInterface_nativePassMouseMove")
+        }) else {
+            return;
+        };
+        // SAFETY: this is the live mouse-move export from the loaded engine.
+        if let Err(error) = unsafe {
+            roblox_runtime::jni::game_activity::pass_mouse_move(
+                native, position.0, position.1, delta.0, delta.1,
+            )
+        } {
+            eprintln!("rusty-blox: locked mouse forwarding failed: {error}");
+        }
+    }
+
     pub(crate) fn new(config: roblox_runtime::RuntimeConfig, asset_dir: PathBuf) -> Self {
+        let data_dir = config.data_dir.clone();
         Self {
             config: Some(config),
             asset_dir,
+            data_dir,
             window: None,
             surface_owner: None,
             engine: None,
@@ -111,6 +130,11 @@ impl ClientApp {
 
 impl Drop for ClientApp {
     fn drop(&mut self) {
+        if let Some(engine) = &self.engine {
+            if let Err(error) = crate::session::save(engine, &self.data_dir) {
+                eprintln!("rusty-blox: could not save Roblox session: {error}");
+            }
+        }
         roblox_runtime::graphics::clear_surface();
         drop(self.engine.take());
         drop(self.surface_owner.take());
@@ -140,7 +164,9 @@ impl winit::application::ApplicationHandler for ClientApp {
                 let next = (position.x as f32, position.y as f32);
                 let delta = (next.0 - self.cursor.0, next.1 - self.cursor.1);
                 self.cursor = next;
-                self.forward_mouse_move(next, delta, event_loop);
+                if !self.cursor_locked {
+                    self.forward_mouse_move(next, delta, event_loop);
+                }
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 if let Some(button) = android_mouse_button(button) {
@@ -161,10 +187,18 @@ impl winit::application::ApplicationHandler for ClientApp {
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 if let PhysicalKey::Code(code) = event.physical_key {
-                    if let Some(key_code) = android_key_code(code) {
+                    if let (Some(key_code), Some(evdev_code)) =
+                        (android_key_code(code), evdev_key_code(code))
+                    {
                         self.forward_key(
                             event.state == ElementState::Pressed,
                             key_code,
+                            evdev_code,
+                            event
+                                .logical_key
+                                .to_text()
+                                .and_then(|s| s.chars().next())
+                                .map_or(0, |ch| ch as i32),
                             self.modifiers,
                             event.repeat,
                             event_loop,
@@ -203,10 +237,32 @@ impl winit::application::ApplicationHandler for ClientApp {
         if self.game_activity.is_some() {
             let _ = roblox_runtime::android::looper::poll_for_current_thread(0);
             self.sync_cursor_lock();
+            if let Some(engine) = &self.engine {
+                crate::session::flush_if_due(engine, &self.data_dir);
+            }
         }
         event_loop.set_control_flow(ControlFlow::WaitUntil(
             std::time::Instant::now() + std::time::Duration::from_millis(16),
         ));
+    }
+
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _device_id: winit::event::DeviceId,
+        event: DeviceEvent,
+    ) {
+        if !self.cursor_locked {
+            return;
+        }
+        if let DeviceEvent::MouseMotion { delta } = event {
+            let Some(window) = self.window.as_ref() else {
+                return;
+            };
+            let size = window.inner_size();
+            let position = (size.width as f32 / 2.0, size.height as f32 / 2.0);
+            self.forward_locked_mouse_move(position, (delta.0 as f32, delta.1 as f32));
+        }
     }
 }
 
@@ -329,6 +385,8 @@ impl ClientApp {
         &mut self,
         down: bool,
         key_code: i32,
+        evdev_code: i32,
+        unicode_char: i32,
         modifiers: ModifiersState,
         repeat: bool,
         event_loop: &ActiveEventLoop,
@@ -352,7 +410,7 @@ impl ClientApp {
                         roblox_runtime::jni::game_activity::pass_key_event(
                             native,
                             down,
-                            key_code,
+                            evdev_code,
                             android_modifiers,
                             repeat,
                         )
@@ -360,6 +418,23 @@ impl ClientApp {
                 })
         });
         self.record_input_result(result, event_loop);
+        if let Some(handle) = self.game_activity {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as i64;
+            let _ = roblox_runtime::jni::game_activity::key(
+                handle,
+                down,
+                key_code,
+                evdev_code,
+                android_modifiers,
+                i32::from(repeat),
+                unicode_char,
+                now,
+                now,
+            );
+        }
     }
 
     fn record_input_result(
@@ -466,6 +541,77 @@ fn android_key_code(code: KeyCode) -> Option<i32> {
         KeyCode::F10 => 140,
         KeyCode::F11 => 141,
         KeyCode::F12 => 142,
+        _ => return None,
+    })
+}
+
+// NativeGLInterface.nativePassKeyEvent expects Linux evdev codes, while the
+// GameActivity KeyEvent path above uses Android keycodes.
+fn evdev_key_code(code: KeyCode) -> Option<i32> {
+    Some(match code {
+        KeyCode::Digit1 => 2,
+        KeyCode::Digit2 => 3,
+        KeyCode::Digit3 => 4,
+        KeyCode::Digit4 => 5,
+        KeyCode::Digit5 => 6,
+        KeyCode::Digit6 => 7,
+        KeyCode::Digit7 => 8,
+        KeyCode::Digit8 => 9,
+        KeyCode::Digit9 => 10,
+        KeyCode::Digit0 => 11,
+        KeyCode::KeyQ => 16,
+        KeyCode::KeyW => 17,
+        KeyCode::KeyE => 18,
+        KeyCode::KeyR => 19,
+        KeyCode::KeyT => 20,
+        KeyCode::KeyY => 21,
+        KeyCode::KeyU => 22,
+        KeyCode::KeyI => 23,
+        KeyCode::KeyO => 24,
+        KeyCode::KeyP => 25,
+        KeyCode::KeyA => 30,
+        KeyCode::KeyS => 31,
+        KeyCode::KeyD => 32,
+        KeyCode::KeyF => 33,
+        KeyCode::KeyG => 34,
+        KeyCode::KeyH => 35,
+        KeyCode::KeyJ => 36,
+        KeyCode::KeyK => 37,
+        KeyCode::KeyL => 38,
+        KeyCode::KeyZ => 44,
+        KeyCode::KeyX => 45,
+        KeyCode::KeyC => 46,
+        KeyCode::KeyV => 47,
+        KeyCode::KeyB => 48,
+        KeyCode::KeyN => 49,
+        KeyCode::KeyM => 50,
+        KeyCode::Escape => 1,
+        KeyCode::Tab => 15,
+        KeyCode::Enter | KeyCode::NumpadEnter => 28,
+        KeyCode::Backspace => 14,
+        KeyCode::Space => 57,
+        KeyCode::ShiftLeft => 42,
+        KeyCode::ShiftRight => 54,
+        KeyCode::ControlLeft => 29,
+        KeyCode::ControlRight => 97,
+        KeyCode::AltLeft => 56,
+        KeyCode::AltRight => 100,
+        KeyCode::ArrowUp => 103,
+        KeyCode::ArrowDown => 108,
+        KeyCode::ArrowLeft => 105,
+        KeyCode::ArrowRight => 106,
+        KeyCode::F1 => 59,
+        KeyCode::F2 => 60,
+        KeyCode::F3 => 61,
+        KeyCode::F4 => 62,
+        KeyCode::F5 => 63,
+        KeyCode::F6 => 64,
+        KeyCode::F7 => 65,
+        KeyCode::F8 => 66,
+        KeyCode::F9 => 67,
+        KeyCode::F10 => 68,
+        KeyCode::F11 => 87,
+        KeyCode::F12 => 88,
         _ => return None,
     })
 }

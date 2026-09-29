@@ -94,6 +94,9 @@ pub(crate) fn initialize_client(
             unsafe { roblox_runtime::jni::game_activity::appbridge_init(f, assets, width, height) }
         },
     )?;
+
+    crate::session::restore(engine, config)?;
+
     call_native(
         engine,
         "Java_com_roblox_engine_jni_NativeGLInterface_nativeAppBridgeStartLuaAppDM",

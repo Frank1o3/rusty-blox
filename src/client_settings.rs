@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-const URL: &str = "https://clientsettingscdn.roblox.com/v2/settings-compressed/application/GoogleAndroidApp.zst";
+const URL: &str =
+    "https://clientsettingscdn.roblox.com/v2/settings-compressed/application/GoogleAndroidApp.zst";
 const MAX_AGE: Duration = Duration::from_secs(6 * 60 * 60);
 
 pub(crate) fn load(explicit: Option<&Path>, cache_dir: &Path) -> Result<String, String> {
@@ -26,7 +27,8 @@ pub(crate) fn load(explicit: Option<&Path>, cache_dir: &Path) -> Result<String, 
             .map_err(|error| format!("read client settings response: {error}"))?;
         let decoded = zstd::stream::decode_all(std::io::Cursor::new(bytes))
             .map_err(|error| format!("decompress client settings: {error}"))?;
-        String::from_utf8(decoded).map_err(|error| format!("client settings are not UTF-8: {error}"))
+        String::from_utf8(decoded)
+            .map_err(|error| format!("client settings are not UTF-8: {error}"))
     })();
 
     match fetched {
@@ -58,7 +60,9 @@ fn cache_path(cache_dir: &Path) -> PathBuf {
 
 fn read_fresh(path: &Path) -> Option<String> {
     let metadata = std::fs::metadata(path).ok()?;
-    let age = SystemTime::now().duration_since(metadata.modified().ok()?).ok()?;
+    let age = SystemTime::now()
+        .duration_since(metadata.modified().ok()?)
+        .ok()?;
     if age >= MAX_AGE {
         return None;
     }
@@ -68,7 +72,10 @@ fn read_fresh(path: &Path) -> Option<String> {
 fn validate(body: String, source: &str) -> Result<String, String> {
     let value: serde_json::Value = serde_json::from_str(&body)
         .map_err(|error| format!("{source} is not valid JSON: {error}"))?;
-    if !value.get("applicationSettings").is_some_and(serde_json::Value::is_object) {
+    if !value
+        .get("applicationSettings")
+        .is_some_and(serde_json::Value::is_object)
+    {
         return Err(format!("{source} has no applicationSettings object"));
     }
     eprintln!("[runtime] client settings: {} bytes ({source})", body.len());

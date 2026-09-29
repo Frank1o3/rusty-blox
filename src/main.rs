@@ -2,6 +2,7 @@ mod app;
 mod client;
 mod client_settings;
 mod host_window;
+mod session;
 mod startup;
 
 use std::path::PathBuf;
