@@ -20,6 +20,12 @@ const MAX_BUFFERS: usize = 3;
 const WL_MARSHAL_FLAG_DESTROY: u32 = 1;
 const WL_SHM_FORMAT_ARGB8888: c_int = 0;
 
+fn trace_overlay(stage: &str) {
+    if std::env::var_os("RBX_RUNTIME_TEXT_OVERLAY_TRACE").is_some() {
+        eprintln!("[text-overlay] {stage}");
+    }
+}
+
 type Proxy = c_void;
 type Interface = c_void;
 type Queue = c_void;
@@ -35,6 +41,7 @@ type AddListener = unsafe extern "C" fn(*mut Proxy, *const *const c_void, *mut c
 type SetQueue = unsafe extern "C" fn(*mut Proxy, *mut Queue);
 type ProxyVersion = unsafe extern "C" fn(*mut Proxy) -> u32;
 type ProxyDestroy = unsafe extern "C" fn(*mut Proxy);
+type DispatchPending = unsafe extern "C" fn(*mut Proxy, *mut Queue) -> c_int;
 
 #[repr(C)]
 struct RegistryListener {
@@ -48,6 +55,7 @@ struct BufferListener {
 }
 
 struct Interfaces {
+    registry: *const Interface,
     compositor: *const Interface,
     subcompositor: *const Interface,
     shm: *const Interface,
@@ -137,15 +145,21 @@ unsafe extern "C" fn registry_global(
 unsafe extern "C" fn registry_global_remove(_data: *mut c_void, _registry: *mut Proxy, _name: u32) {}
 
 unsafe extern "C" fn buffer_release(data: *mut c_void, _buffer: *mut Proxy) {
+    trace_overlay("buffer release callback: begin");
     if !data.is_null() {
         // SAFETY: listener data points to a stable AtomicBool owned by its
         // ShmBuffer and lives until after the proxy is destroyed.
         unsafe { &*data.cast::<AtomicBool>() }.store(true, Ordering::Release);
     }
+    trace_overlay("buffer release callback: done");
 }
 
 struct ShmBuffer {
     proxy: *mut Proxy,
+    // libwayland may retain the listener table address on the proxy and call
+    // it later, when wl_buffer.release arrives. Keep that table alive for the
+    // same lifetime as the buffer proxy.
+    _listener: Box<BufferListener>,
     mapping: *mut c_void,
     mapping_len: usize,
     width: u32,
@@ -221,6 +235,7 @@ impl ShmBuffer {
             unsafe { libc::munmap(mapping, size as usize) };
             return Err("wl_shm_create_pool returned null".to_owned());
         }
+        trace_overlay("shared-memory pool created");
         // SAFETY: pool creation copied the fd into Wayland's outgoing message.
         // Flush before `file` closes below so the compositor receives it.
         // Buffer creation itself follows wl_shm_pool.create_buffer's ABI.
@@ -255,17 +270,19 @@ impl ShmBuffer {
             unsafe { libc::munmap(mapping, size as usize) };
             return Err("wl_shm_pool_create_buffer returned null".to_owned());
         }
+        trace_overlay("shared-memory buffer created");
 
         let released = Box::new(AtomicBool::new(true));
-        let listener = BufferListener {
+        let listener = Box::new(BufferListener {
             release: buffer_release,
-        };
+        });
         // SAFETY: listener layout is one function pointer per wl_buffer event;
-        // released remains at a stable address for the ShmBuffer's lifetime.
+        // both the listener table and released data remain at stable heap
+        // addresses for the ShmBuffer's lifetime.
         let status = unsafe {
             add_listener(
                 buffer,
-                (&listener as *const BufferListener).cast::<*const c_void>(),
+                (&*listener as *const BufferListener).cast::<*const c_void>(),
                 (&*released as *const AtomicBool).cast_mut().cast(),
             )
         };
@@ -282,9 +299,11 @@ impl ShmBuffer {
             }
             return Err("could not install the Wayland text buffer listener".to_owned());
         }
+        trace_overlay("buffer release listener installed");
         drop(file);
         Ok(Self {
             proxy: buffer,
+            _listener: listener,
             mapping,
             mapping_len: size as usize,
             width,
@@ -320,8 +339,7 @@ pub(crate) struct WaylandTextOverlay {
     interfaces: Interfaces,
     marshal: MarshalFlags,
     add_listener: AddListener,
-    set_queue: SetQueue,
-    proxy_version: ProxyVersion,
+    dispatch_pending_fn: DispatchPending,
     proxy_destroy: ProxyDestroy,
     buffers: Vec<ShmBuffer>,
     last_frame: Option<FrameKey>,
@@ -340,11 +358,6 @@ impl WaylandTextOverlay {
     pub(crate) fn create(display: *mut c_void, parent: *mut c_void) -> Result<Self, String> {
         let library = unsafe { Library::new("libwayland-client.so.0") }
             .map_err(|error| format!("load libwayland-client for text overlay: {error}"))?;
-        let get_registry = unsafe {
-            *library
-                .get::<unsafe extern "C" fn(*mut Proxy) -> *mut Proxy>(b"wl_display_get_registry\0")
-                .map_err(|error| format!("resolve wl_display_get_registry: {error}"))?
-        };
         let create_queue = unsafe {
             *library
                 .get::<unsafe extern "C" fn(*mut Proxy) -> *mut Queue>(b"wl_display_create_queue\0")
@@ -355,9 +368,9 @@ impl WaylandTextOverlay {
                 .get::<unsafe extern "C" fn(*mut Proxy, *mut Queue) -> c_int>(b"wl_display_roundtrip_queue\0")
                 .map_err(|error| format!("resolve wl_display_roundtrip_queue: {error}"))?
         };
-        let dispatch_pending = unsafe {
+        let dispatch_pending_fn = unsafe {
             *library
-                .get::<unsafe extern "C" fn(*mut Proxy, *mut Queue) -> c_int>(b"wl_display_dispatch_queue_pending\0")
+                .get::<DispatchPending>(b"wl_display_dispatch_queue_pending\0")
                 .map_err(|error| format!("resolve wl_display_dispatch_queue_pending: {error}"))?
         };
         let flush = unsafe {
@@ -391,6 +404,7 @@ impl WaylandTextOverlay {
                 .map_err(|error| format!("resolve wl_proxy_destroy: {error}"))?
         };
         let interfaces = Interfaces {
+            registry: interface(&library, b"wl_registry_interface\0")?,
             compositor: interface(&library, b"wl_compositor_interface\0")?,
             subcompositor: interface(&library, b"wl_subcompositor_interface\0")?,
             shm: interface(&library, b"wl_shm_interface\0")?,
@@ -412,7 +426,19 @@ impl WaylandTextOverlay {
             return Err("wl_display_create_queue returned null".to_owned());
         }
         // SAFETY: the display is live and registry is a core display request.
-        let registry = unsafe { get_registry(display) };
+        // `wl_display_get_registry` is an inline generated wrapper in
+        // wayland-client-protocol.h, not an exported libwayland symbol. Its
+        // protocol request is wl_display opcode 1 with a wl_registry result.
+        let registry = unsafe {
+            marshal(
+                display,
+                1,
+                interfaces.registry,
+                1,
+                0,
+                ptr::null_mut::<*mut Proxy>(),
+            )
+        };
         if registry.is_null() {
             return Err("wl_display_get_registry returned null".to_owned());
         }
@@ -422,16 +448,16 @@ impl WaylandTextOverlay {
             interfaces,
             bindings: Bindings::default(),
         };
-        let listener = RegistryListener {
+        let listener = Box::new(RegistryListener {
             global: registry_global,
             global_remove: registry_global_remove,
-        };
+        });
         // SAFETY: the registry listener is live for the synchronous roundtrip;
         // its data points at the live stack context above.
         let status = unsafe {
             add_listener(
                 registry,
-                (&listener as *const RegistryListener).cast::<*const c_void>(),
+                (&*listener as *const RegistryListener).cast::<*const c_void>(),
                 (&mut context as *mut BindContext).cast(),
             )
         };
@@ -443,6 +469,10 @@ impl WaylandTextOverlay {
         if unsafe { roundtrip_queue(display, queue) } < 0 {
             return Err("Wayland registry roundtrip failed".to_owned());
         }
+        // wl_registry_destroy is client-side only (wl_registry has no destroy
+        // request; opcode 0 is bind). Drop the local proxy after enumeration
+        // so its listener and stack BindContext cannot be reached later.
+        unsafe { proxy_destroy(registry) };
         let bindings = context.bindings;
         if bindings.compositor.is_null() || bindings.subcompositor.is_null() || bindings.shm.is_null() {
             return Err("Wayland compositor, subcompositor, or shared memory is unavailable".to_owned());
@@ -528,8 +558,7 @@ impl WaylandTextOverlay {
             interfaces: context.interfaces,
             marshal,
             add_listener,
-            set_queue,
-            proxy_version,
+            dispatch_pending_fn,
             proxy_destroy,
             buffers: Vec::new(),
             last_frame: None,
@@ -544,7 +573,9 @@ impl WaylandTextOverlay {
         info: RawTextBoxInfo,
         scale_factor: f64,
     ) -> Result<(), String> {
+        trace_overlay("dispatch pending events: begin");
         self.dispatch_pending()?;
+        trace_overlay("dispatch pending events: done");
         let scale = scale_factor.round().clamp(1.0, 4.0) as u32;
         let key = FrameKey {
             text: text.to_owned(),
@@ -565,7 +596,9 @@ impl WaylandTextOverlay {
             // dirty and retry after a later pump dispatches their release.
             return Ok(());
         };
+        trace_overlay("buffer acquired");
         self.draw_buffer(slot, text, key.caret, info)?;
+        trace_overlay("buffer painted");
 
         // The text-box geometry is in physical surface pixels; subsurface
         // placement is in logical coordinates and the buffer scale restores
@@ -603,6 +636,7 @@ impl WaylandTextOverlay {
         self.buffers[slot].released.store(false, Ordering::Release);
         self.hidden = false;
         self.last_frame = Some(key);
+        trace_overlay("surface committed; flushing");
         self.flush()
     }
 
@@ -678,6 +712,9 @@ impl WaylandTextOverlay {
         let font_size = info.font_size.max(10.0).min(buffer.height as f32) as f64;
         context.set_font_size(font_size);
 
+        // Match Cordial's GTK editor: it masks the three values observed on
+        // Roblox boxes that hide their text (crates/cordial-runtime/src/
+        // android/wayland.rs, update_text_overlay).
         let display_text = if matches!(info.text_input_type, 5 | 9 | 10) {
             "•".repeat(text.chars().count())
         } else {
@@ -724,14 +761,8 @@ impl WaylandTextOverlay {
     }
 
     fn dispatch_pending(&mut self) -> Result<(), String> {
-        let dispatch = unsafe {
-            *self
-                ._library
-                .get::<unsafe extern "C" fn(*mut Proxy, *mut Queue) -> c_int>(b"wl_display_dispatch_queue_pending\0")
-                .map_err(|error| format!("resolve Wayland queue dispatch: {error}"))?
-        };
         // SAFETY: this is our private event queue on the live Winit display.
-        if unsafe { dispatch(self.display, self.queue) } < 0 {
+        if unsafe { (self.dispatch_pending_fn)(self.display, self.queue) } < 0 {
             return Err("dispatch Wayland text overlay events failed".to_owned());
         }
         Ok(())
@@ -797,8 +828,21 @@ impl Drop for WaylandTextOverlay {
                 WL_MARSHAL_FLAG_DESTROY,
             );
             (self.marshal)(self.subcompositor, 0, ptr::null(), 1, WL_MARSHAL_FLAG_DESTROY);
-            (self.proxy_destroy)(self.compositor);
-            (self.proxy_destroy)(self.shm);
+            if self.compositor_version >= 4 {
+                // wl_compositor.destroy was added in version 4. Older
+                // compositor proxies have no protocol destructor request.
+                (self.marshal)(
+                    self.compositor,
+                    0,
+                    ptr::null(),
+                    self.compositor_version,
+                    WL_MARSHAL_FLAG_DESTROY,
+                );
+            } else {
+                (self.proxy_destroy)(self.compositor);
+            }
+            // wl_shm.destroy is available from version 1.
+            (self.marshal)(self.shm, 0, ptr::null(), self.shm_version, WL_MARSHAL_FLAG_DESTROY);
         }
         self.buffers.clear();
         let destroy_queue = unsafe {

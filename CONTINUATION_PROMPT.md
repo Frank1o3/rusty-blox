@@ -19,7 +19,6 @@ overlay work.
 
 The `rusty-blox` working tree currently has changes in:
 
-- `Cargo.toml` and `Cargo.lock` (direct libc / Wayland client dependencies)
 - `src/text_overlay.rs` (new low-level Wayland subsurface and shared-memory
   text/caret painter; not yet compiled or exercised)
 - `src/host_window.rs` (Wayland overlay owner and update/hide integration)
