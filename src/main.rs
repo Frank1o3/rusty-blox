@@ -6,6 +6,8 @@ mod host_window;
 mod settings;
 mod startup;
 mod text_overlay;
+#[cfg(feature = "webview")]
+mod webview;
 
 use std::path::PathBuf;
 use winit::event_loop::EventLoop;
@@ -180,34 +182,71 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-struct InstanceLock(std::path::PathBuf);
+struct InstanceLock {
+    _file: std::fs::File,
+}
 impl InstanceLock {
     fn acquire(path: &std::path::Path) -> Result<Self, Box<dyn std::error::Error>> {
-        use std::io::Write;
-        let mut file = match std::fs::OpenOptions::new()
+        use std::io::{Read, Seek, SeekFrom, Write};
+        use std::os::fd::AsRawFd;
+
+        // Keep the inode in place and let the kernel own the lock. Removing a
+        // PID file on shutdown races with another launcher creating a fresh
+        // one, while a crash between create_new and write leaves an empty file
+        // that the old PID-only check misread as a live instance forever.
+        let mut file = std::fs::OpenOptions::new()
+            .read(true)
             .write(true)
-            .create_new(true)
+            .create(true)
             .open(path)
-        {
-            Ok(file) => file,
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                let pid = std::fs::read_to_string(path)
-                    .ok()
-                    .and_then(|s| s.trim().parse::<u32>().ok());
-                if pid.is_some_and(|pid| !std::path::Path::new(&format!("/proc/{pid}")).exists()) {
-                    let _ = std::fs::remove_file(path);
-                    return Self::acquire(path);
-                }
+            .map_err(|error| format!("open instance lock: {error}"))?;
+        // SAFETY: `as_raw_fd` is a live descriptor owned by `file`; flock does
+        // not take ownership and the descriptor remains open for the lock's
+        // lifetime.
+        let locked = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+        if locked != 0 {
+            let error = std::io::Error::last_os_error();
+            if error
+                .raw_os_error()
+                .is_some_and(|code| code == libc::EWOULDBLOCK || code == libc::EAGAIN)
+            {
                 return Err("a rusty-blox Roblox instance is already running".into());
             }
-            Err(error) => return Err(format!("create Roblox instance lock: {error}").into()),
-        };
+            return Err(format!("lock instance file: {error}").into());
+        }
+
+        // Honor a PID marker left by a build that predates flock, but only
+        // when /proc confirms that PID is actually rusty-blox. The old code
+        // used the PID file as its lock, so it may still be running while this
+        // build is upgraded.
+        let mut previous = String::new();
+        file.read_to_string(&mut previous)?;
+        if previous
+            .trim()
+            .parse::<u32>()
+            .is_ok_and(legacy_rusty_blox_process_is_live)
+        {
+            return Err("a rusty-blox Roblox instance is already running".into());
+        }
+
+        file.set_len(0)?;
+        file.seek(SeekFrom::Start(0))?;
         writeln!(file, "{}", std::process::id())?;
-        Ok(Self(path.to_path_buf()))
+        file.sync_data()?;
+        Ok(Self { _file: file })
     }
 }
-impl Drop for InstanceLock {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
-    }
+
+fn legacy_rusty_blox_process_is_live(pid: u32) -> bool {
+    let Ok(command) = std::fs::read(format!("/proc/{pid}/cmdline")) else {
+        return false;
+    };
+    let Some(executable) = command
+        .split(|byte| *byte == 0)
+        .next()
+        .filter(|arg| !arg.is_empty())
+    else {
+        return false;
+    };
+    executable == b"rusty-blox" || executable.ends_with(b"/rusty-blox")
 }

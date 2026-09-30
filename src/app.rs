@@ -29,6 +29,8 @@ pub(crate) struct ClientApp {
     settings: crate::settings::Settings,
     game_mode: Option<crate::desktop::GameMode>,
     discord_presence: Option<crate::desktop::DiscordPresence>,
+    #[cfg(feature = "webview")]
+    webview: Option<crate::webview::WebViewHost>,
 }
 
 impl ClientApp {
@@ -78,6 +80,8 @@ impl ClientApp {
             settings,
             game_mode: None,
             discord_presence: None,
+            #[cfg(feature = "webview")]
+            webview: None,
         }
     }
 
@@ -341,6 +345,36 @@ impl winit::application::ApplicationHandler for ClientApp {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        #[cfg(feature = "webview")]
+        {
+            crate::webview::WebViewHost::pump_events();
+            if let Some(request) = roblox_runtime::webview::take_request() {
+                eprintln!("rusty-blox: delivering Roblox web view request to GTK");
+                if self.webview.is_none() {
+                    match crate::webview::WebViewHost::new(self.session_dir.as_deref()) {
+                        Ok(webview) => self.webview = Some(webview),
+                        Err(error) => eprintln!("rusty-blox: could not create web view: {error}"),
+                    }
+                }
+                if let Some(webview) = &self.webview {
+                    webview.open(request);
+                }
+            }
+        }
+        #[cfg(not(feature = "webview"))]
+        if let Some(request) = roblox_runtime::webview::take_request() {
+            if !external_web_url_allowed(&request.url) {
+                eprintln!("rusty-blox: blocked an unsafe Roblox web view URL");
+            } else if let Err(error) = gtk4::gio::AppInfo::launch_default_for_uri(
+                &request.url,
+                None::<&gtk4::gio::AppLaunchContext>,
+            ) {
+                eprintln!(
+                    "rusty-blox: could not open Roblox's page in the system browser: {error}"
+                );
+            }
+        }
+
         if self.game_activity.is_some() {
             let _ = roblox_runtime::android::looper::poll_for_current_thread(0);
             self.refresh_text_focus();
@@ -377,6 +411,17 @@ impl winit::application::ApplicationHandler for ClientApp {
     }
 }
 
+#[cfg(not(feature = "webview"))]
+fn external_web_url_allowed(uri: &str) -> bool {
+    let Ok(parsed) = gtk4::glib::Uri::parse(uri, gtk4::glib::UriFlags::NONE) else {
+        return false;
+    };
+    parsed.scheme().eq_ignore_ascii_case("https")
+        && parsed.host().is_some_and(|host| !host.is_empty())
+        && parsed.userinfo().is_none()
+        && (parsed.port() == -1 || parsed.port() == 443)
+}
+
 impl ClientApp {
     fn sync_text_overlay(&mut self) {
         let Some(owner) = self.surface_owner.as_mut() else {
@@ -390,10 +435,7 @@ impl ClientApp {
             owner.hide_text_overlay();
             return;
         };
-        let scale = self
-            .window
-            .as_ref()
-            .map_or(1.0, Window::scale_factor);
+        let scale = self.window.as_ref().map_or(1.0, Window::scale_factor);
         owner.update_text_overlay(&self.text_value, self.text_cursor, info, scale);
     }
 
