@@ -4,8 +4,8 @@
     version="0.1.0"
 
 [features]
-    default=[]
-    # Enable the embedded WebKitGTK 6 window with `cargo run --features webview`.
+    default=["webview"]
+    # The embedded WebKitGTK 6 window is part of the normal runtime.
     # This needs the WebKitGTK and JavaScriptCore development packages from the host.
     webview=["dep:webkit6", "gtk4/v4_10"]
 

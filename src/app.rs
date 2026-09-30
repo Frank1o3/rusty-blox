@@ -55,6 +55,8 @@ impl ClientApp {
         asset_dir: PathBuf,
         settings: crate::settings::Settings,
     ) -> Self {
+        #[cfg(feature = "webview")]
+        eprintln!("rusty-blox: embedded WebKitGTK web view host enabled");
         let session_dir = config
             .session
             .as_ref()
@@ -181,6 +183,7 @@ impl ClientApp {
             .map_err(|error| format!("initialize GameActivity: {error}"))?;
         println!("GameActivity initialized; handle={game_activity}");
         crate::startup::initialize_client(&engine, &config, &self.asset_dir, game_activity, size)?;
+        roblox_runtime::webview::arm(&engine);
         self.engine = Some(engine);
         self.game_activity = Some(game_activity);
         Ok(())
@@ -348,16 +351,31 @@ impl winit::application::ApplicationHandler for ClientApp {
         #[cfg(feature = "webview")]
         {
             crate::webview::WebViewHost::pump_events();
-            if let Some(request) = roblox_runtime::webview::take_request() {
-                eprintln!("rusty-blox: delivering Roblox web view request to GTK");
-                if self.webview.is_none() {
-                    match crate::webview::WebViewHost::new(self.session_dir.as_deref()) {
-                        Ok(webview) => self.webview = Some(webview),
-                        Err(error) => eprintln!("rusty-blox: could not create web view: {error}"),
+            if let Some(event) = roblox_runtime::webview::take_event() {
+                match event {
+                    roblox_runtime::webview::WebViewEvent::Open(request) => {
+                        eprintln!("rusty-blox: delivering Roblox web view request to GTK");
+                        if self.webview.is_none() {
+                            match crate::webview::WebViewHost::new(self.session_dir.as_deref()) {
+                                Ok(webview) => self.webview = Some(webview),
+                                Err(error) => {
+                                    eprintln!("rusty-blox: could not create web view: {error}")
+                                }
+                            }
+                        }
+                        if let Some(webview) = &self.webview {
+                            webview.open(request);
+                        }
                     }
-                }
-                if let Some(webview) = &self.webview {
-                    webview.open(request);
+                    roblox_runtime::webview::WebViewEvent::Close => {
+                        if let Some(webview) = &self.webview {
+                            webview.close();
+                        } else {
+                            eprintln!(
+                                "rusty-blox: Roblox closed a web view before the host opened one"
+                            );
+                        }
+                    }
                 }
             }
         }

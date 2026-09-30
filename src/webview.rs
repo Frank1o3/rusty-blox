@@ -35,7 +35,13 @@ impl WebViewHost {
             .build();
 
         let window = gtk4::Window::new();
+        // Roblox presents the WebView as a full-screen native overlay. This
+        // host currently uses a Winit/Vulkan top-level, so use a focused,
+        // undecorated GTK surface that covers that viewport while retaining
+        // WebKit's native pointer and keyboard handling.
         window.set_default_size(900, 700);
+        window.set_decorated(false);
+        window.set_modal(true);
         let header = gtk4::HeaderBar::new();
         let back = gtk4::Button::from_icon_name("go-previous-symbolic");
         let back_view = view.clone();
@@ -49,6 +55,13 @@ impl WebViewHost {
         let reload_view = view.clone();
         reload.connect_clicked(move |_| reload_view.reload());
         header.pack_end(&reload);
+        let close = gtk4::Button::from_icon_name("window-close-symbolic");
+        let close_window = window.clone();
+        close.connect_clicked(move |_| {
+            close_window.unfullscreen();
+            close_window.set_visible(false);
+        });
+        header.pack_end(&close);
         window.set_titlebar(Some(&header));
         window.set_child(Some(&view));
         window.connect_close_request(|window| {
@@ -108,12 +121,19 @@ impl WebViewHost {
         eprintln!("rusty-blox: presenting Roblox web view window");
         self.window.set_title(Some(&request.title));
         self.window.present();
+        self.window.fullscreen();
         let mut state = self.load_state.borrow_mut();
         if state.cookie_ready {
             self.view.load_uri(&request.url);
         } else {
             state.pending_uri = Some(request.url);
         }
+    }
+
+    pub(crate) fn close(&self) {
+        self.window.unfullscreen();
+        self.window.set_visible(false);
+        eprintln!("rusty-blox: Roblox web view overlay hidden");
     }
 
     pub(crate) fn pump_events() {
