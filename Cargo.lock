@@ -1817,11 +1817,14 @@ name = "rusty-blox"
 version = "0.1.0"
 dependencies = [
  "gtk4",
+ "libc",
  "libloading 0.9.0",
  "roblox-runtime",
  "serde",
  "serde_json",
  "ureq",
+ "wayland-backend",
+ "wayland-client",
  "winit",
  "zbus",
  "zip",
