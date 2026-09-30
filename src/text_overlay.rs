@@ -34,6 +34,7 @@ type MarshalFlags = unsafe extern "C" fn(
 type AddListener = unsafe extern "C" fn(*mut Proxy, *const *const c_void, *mut c_void) -> c_int;
 type SetQueue = unsafe extern "C" fn(*mut Proxy, *mut Queue);
 type ProxyVersion = unsafe extern "C" fn(*mut Proxy) -> u32;
+type ProxyDestroy = unsafe extern "C" fn(*mut Proxy);
 
 #[repr(C)]
 struct RegistryListener {
@@ -213,7 +214,6 @@ impl ShmBuffer {
                 ptr::null_mut::<*mut Proxy>(),
                 file.as_raw_fd(),
                 size_i32,
-                ptr::null_mut::<*mut Proxy>(),
             )
         };
         if pool.is_null() {
@@ -237,7 +237,6 @@ impl ShmBuffer {
                 height_i32,
                 stride_i32,
                 WL_SHM_FORMAT_ARGB8888,
-                ptr::null_mut::<*mut Proxy>(),
             )
         };
         // wl_shm_pool.destroy is request 1 and the pool no longer needs a
@@ -323,6 +322,7 @@ pub(crate) struct WaylandTextOverlay {
     add_listener: AddListener,
     set_queue: SetQueue,
     proxy_version: ProxyVersion,
+    proxy_destroy: ProxyDestroy,
     buffers: Vec<ShmBuffer>,
     last_frame: Option<FrameKey>,
     hidden: bool,
@@ -384,6 +384,11 @@ impl WaylandTextOverlay {
             *library
                 .get::<ProxyVersion>(b"wl_proxy_get_version\0")
                 .map_err(|error| format!("resolve wl_proxy_get_version: {error}"))?
+        };
+        let proxy_destroy = unsafe {
+            *library
+                .get::<ProxyDestroy>(b"wl_proxy_destroy\0")
+                .map_err(|error| format!("resolve wl_proxy_destroy: {error}"))?
         };
         let interfaces = Interfaces {
             compositor: interface(&library, b"wl_compositor_interface\0")?,
@@ -525,6 +530,7 @@ impl WaylandTextOverlay {
             add_listener,
             set_queue,
             proxy_version,
+            proxy_destroy,
             buffers: Vec::new(),
             last_frame: None,
             hidden: true,
@@ -790,9 +796,9 @@ impl Drop for WaylandTextOverlay {
                 self.compositor_version,
                 WL_MARSHAL_FLAG_DESTROY,
             );
-            (self.marshal)(self.compositor, 0, ptr::null(), self.compositor_version, WL_MARSHAL_FLAG_DESTROY);
             (self.marshal)(self.subcompositor, 0, ptr::null(), 1, WL_MARSHAL_FLAG_DESTROY);
-            (self.marshal)(self.shm, 1, ptr::null(), self.shm_version, WL_MARSHAL_FLAG_DESTROY);
+            (self.proxy_destroy)(self.compositor);
+            (self.proxy_destroy)(self.shm);
         }
         self.buffers.clear();
         let destroy_queue = unsafe {

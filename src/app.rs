@@ -344,6 +344,7 @@ impl winit::application::ApplicationHandler for ClientApp {
         if self.game_activity.is_some() {
             let _ = roblox_runtime::android::looper::poll_for_current_thread(0);
             self.refresh_text_focus();
+            self.sync_text_overlay();
             self.sync_cursor_lock();
             if let Some(engine) = &self.engine {
                 if let Some(session_dir) = &self.session_dir {
@@ -377,6 +378,25 @@ impl winit::application::ApplicationHandler for ClientApp {
 }
 
 impl ClientApp {
+    fn sync_text_overlay(&mut self) {
+        let Some(owner) = self.surface_owner.as_mut() else {
+            return;
+        };
+        if roblox_runtime::jni::game_activity::focused_textbox().is_none() {
+            owner.hide_text_overlay();
+            return;
+        }
+        let Some(info) = roblox_runtime::jni::game_activity::focused_textbox_info() else {
+            owner.hide_text_overlay();
+            return;
+        };
+        let scale = self
+            .window
+            .as_ref()
+            .map_or(1.0, Window::scale_factor);
+        owner.update_text_overlay(&self.text_value, self.text_cursor, info, scale);
+    }
+
     fn refresh_text_focus(&mut self) {
         let generation = roblox_runtime::jni::game_activity::textbox_generation();
         if self.text_generation == Some(generation) {

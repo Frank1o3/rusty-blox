@@ -5,6 +5,7 @@ mod desktop;
 mod host_window;
 mod settings;
 mod startup;
+mod text_overlay;
 
 use std::path::PathBuf;
 use winit::event_loop::EventLoop;

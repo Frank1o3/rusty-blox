@@ -8,7 +8,10 @@ use winit::window::Window;
 
 pub(crate) enum SurfaceOwner {
     X11,
-    Wayland(WaylandEglWindow),
+    Wayland {
+        egl: WaylandEglWindow,
+        overlay: Option<crate::text_overlay::WaylandTextOverlay>,
+    },
 }
 
 pub(crate) struct WaylandEglWindow {
@@ -109,6 +112,16 @@ impl SurfaceOwner {
             }
             (RawDisplayHandle::Wayland(display), RawWindowHandle::Wayland(window_handle)) => {
                 let egl = WaylandEglWindow::create(window_handle.surface, size.width, size.height)?;
+                let overlay = match crate::text_overlay::WaylandTextOverlay::create(
+                    display.display.as_ptr(),
+                    window_handle.surface.as_ptr(),
+                ) {
+                    Ok(overlay) => Some(overlay),
+                    Err(error) => {
+                        eprintln!("rusty-blox: text overlay unavailable: {error}");
+                        None
+                    }
+                };
                 // SAFETY: winit owns the display/surface, while this owner
                 // keeps the derived wl_egl_window alive through engine shutdown.
                 let surface = unsafe {
@@ -122,7 +135,7 @@ impl SurfaceOwner {
                 }
                 .map_err(|error| error.to_string())?;
                 roblox_runtime::graphics::install_surface(surface);
-                Ok(Self::Wayland(egl))
+                Ok(Self::Wayland { egl, overlay })
             }
             (display, window) => Err(format!(
                 "unsupported winit handles: display {display:?}, window {window:?}; expected Xlib or Wayland"
@@ -131,10 +144,32 @@ impl SurfaceOwner {
     }
 
     pub(crate) fn resize(&self, width: u32, height: u32) -> Result<(), String> {
-        if let Self::Wayland(egl) = self {
+        if let Self::Wayland { egl, .. } = self {
             egl.resize_to(width, height)?;
         }
         Ok(())
+    }
+
+    pub(crate) fn update_text_overlay(
+        &mut self,
+        text: &str,
+        caret: usize,
+        info: roblox_runtime::jni::game_activity::RawTextBoxInfo,
+        scale_factor: f64,
+    ) {
+        if let Self::Wayland { overlay: Some(overlay), .. } = self {
+            if let Err(error) = overlay.update(text, caret, info, scale_factor) {
+                eprintln!("rusty-blox: text overlay update failed: {error}");
+            }
+        }
+    }
+
+    pub(crate) fn hide_text_overlay(&mut self) {
+        if let Self::Wayland { overlay: Some(overlay), .. } = self {
+            if let Err(error) = overlay.hide() {
+                eprintln!("rusty-blox: hide text overlay failed: {error}");
+            }
+        }
     }
 }
 
