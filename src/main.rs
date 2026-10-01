@@ -81,8 +81,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&lock_root)?;
     let _instance_lock = InstanceLock::acquire(&lock_root.join("roblox-instance.lock"))?;
     let user_settings = settings::load();
-    #[cfg(feature = "aimbot")]
-    let aimbot_config = settings::load_aimbot_config();
     let log_level = user_settings.log_level.clamp(1, 4);
     unsafe {
         std::env::set_var("RUSTY_BLOX_LOG_LEVEL", log_level.to_string());
@@ -202,14 +200,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("Native libraries: {}", config.native_lib_dir.display());
 
     let event_loop = EventLoop::new()?;
-    let mut app = app::ClientApp::new(
-        config,
-        asset_dir,
-        user_settings,
-        fast_flags_path,
-        #[cfg(feature = "aimbot")]
-        aimbot_config,
-    );
+    let mut app = app::ClientApp::new(config, asset_dir, user_settings, fast_flags_path);
     event_loop.run_app(&mut app)?;
     if let Some(error) = app.take_failure() {
         return Err(error.into());

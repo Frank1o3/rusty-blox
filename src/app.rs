@@ -33,8 +33,6 @@ pub(crate) struct ClientApp {
     movement_pressed: Vec<KeyCode>,
     movement_active: [Option<KeyCode>; 2],
     settings: crate::settings::Settings,
-    #[cfg(feature = "aimbot")]
-    aimbot_config: extra::config::AimbotConfig,
     game_mode: Option<crate::desktop::GameMode>,
     discord_presence: Option<crate::desktop::DiscordPresence>,
     #[cfg(feature = "webview")]
@@ -63,7 +61,6 @@ impl ClientApp {
         asset_dir: PathBuf,
         settings: crate::settings::Settings,
         fast_flags_path: PathBuf,
-        #[cfg(feature = "aimbot")] aimbot_config: extra::config::AimbotConfig,
     ) -> Self {
         #[cfg(feature = "webview")]
         eprintln!("rusty-blox: embedded WebKitGTK web view host enabled");
@@ -96,8 +93,6 @@ impl ClientApp {
             movement_pressed: Vec::new(),
             movement_active: [None, None],
             settings,
-            #[cfg(feature = "aimbot")]
-            aimbot_config,
             game_mode: None,
             discord_presence: None,
             #[cfg(feature = "webview")]
@@ -172,15 +167,6 @@ impl ClientApp {
             "Host window ready: {}x{} ({backend:?})",
             size.width, size.height
         );
-        #[cfg(feature = "aimbot")]
-        {
-            if self.aimbot_config.enabled {
-                eprintln!(
-                    "[aimbot] config enabled in {}, but internal Vulkan pixel readback is not implemented; detector and aiming remain inactive",
-                    crate::settings::aimbot_config_path().display()
-                );
-            }
-        }
 
         let mut engine = config
             .load_engine()
