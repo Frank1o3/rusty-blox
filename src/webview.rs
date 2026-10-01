@@ -75,6 +75,7 @@ impl WebViewHost {
         }));
         let popup_windows = Rc::new(RefCell::new(Vec::new()));
         install_navigation_policy(&view);
+        install_load_diagnostics(&view);
         install_popup_handling(&view, &popup_windows);
 
         if let Some(cookie) = session_dir.and_then(read_roblox_session_cookie) {
@@ -122,6 +123,10 @@ impl WebViewHost {
         self.window.set_title(Some(&request.title));
         self.window.present();
         self.window.fullscreen();
+        // Keep keyboard and pointer focus in WebKit while this separate GTK
+        // top-level covers the game window. The game input path is driven by
+        // Winit, so it naturally stops receiving events while GTK owns focus.
+        self.view.grab_focus();
         let mut state = self.load_state.borrow_mut();
         if state.cookie_ready {
             self.view.load_uri(&request.url);
@@ -159,13 +164,77 @@ fn install_navigation_policy(view: &webkit6::WebView) {
             .and_then(|request| request.uri())
             .map(|uri| uri.to_string())
             .unwrap_or_default();
-        if webview_uri_allowed(&uri) {
+        // WebKit may request a target=_blank/window.open page before the page
+        // assigns its URL. Let that empty popup be created; its later
+        // navigation is checked by this same policy on the child WebView.
+        let deferred_popup = kind == webkit6::PolicyDecisionType::NewWindowAction && uri.is_empty();
+        if webview_uri_allowed(&uri) || deferred_popup {
+            if deferred_popup {
+                eprintln!("rusty-blox: allowing a deferred WebView popup (no initial URL)");
+            }
             decision.use_();
         } else {
+            eprintln!(
+                "rusty-blox: blocked WebView {kind:?} to {}",
+                uri_label(&uri)
+            );
             decision.ignore();
         }
         true
     });
+}
+
+fn install_load_diagnostics(view: &webkit6::WebView) {
+    view.connect_load_changed(|view, event| {
+        let uri = view.uri().map(|uri| uri.to_string()).unwrap_or_default();
+        let host = uri_host(&uri).unwrap_or_else(|| "unknown host".to_owned());
+        eprintln!("rusty-blox: WebView load {event:?} ({host})");
+    });
+    view.connect_load_failed(|_, event, failing_uri, error| {
+        let host = uri_host(failing_uri).unwrap_or_else(|| "unknown host".to_owned());
+        eprintln!("rusty-blox: WebView load failed during {event:?} ({host}): {error}");
+        false
+    });
+    view.connect_resource_load_started(|_, resource, request| {
+        let uri = request
+            .uri()
+            .map(|uri| uri.to_string())
+            .or_else(|| resource.uri().map(|uri| uri.to_string()))
+            .unwrap_or_default();
+        let host = uri_host(&uri).unwrap_or_else(|| "unknown host".to_owned());
+        resource.connect_failed(move |_, error| {
+            // WebKit reports cancellations for replaced requests during
+            // redirects and normal page teardown. Keep those out of the
+            // failure log so actual network errors stand out.
+            if error.matches(webkit6::NetworkError::Cancelled) {
+                return;
+            }
+            eprintln!("rusty-blox: WebView resource failed ({host}): {error}");
+        });
+    });
+    view.connect_web_process_terminated(|_, reason| {
+        eprintln!("rusty-blox: WebKit web process terminated ({reason:?})");
+    });
+}
+
+fn uri_host(uri: &str) -> Option<String> {
+    gtk4::glib::Uri::parse(uri, gtk4::glib::UriFlags::NONE)
+        .ok()
+        .and_then(|uri| uri.host().map(|host| host.to_string()))
+}
+
+fn uri_label(uri: &str) -> String {
+    let Ok(parsed) = gtk4::glib::Uri::parse(uri, gtk4::glib::UriFlags::NONE) else {
+        return "an unparseable URL".to_owned();
+    };
+    if parsed.scheme().eq_ignore_ascii_case("about") {
+        return format!("about:{} URL", parsed.path());
+    }
+    match (parsed.scheme(), parsed.host()) {
+        (scheme, Some(host)) => format!("{scheme}://{host}"),
+        (scheme, None) if !scheme.is_empty() => format!("{scheme}: URL"),
+        _ => "an empty URL".to_owned(),
+    }
 }
 
 fn install_popup_handling(
@@ -179,9 +248,14 @@ fn install_popup_handling(
             .and_then(|request| request.uri())
             .map(|uri| uri.to_string())
             .unwrap_or_default();
-        if !webview_uri_allowed(&uri) {
+        // A blank window is a normal WebKit popup pattern. The child WebView
+        // still runs the HTTPS-only navigation policy before loading anything.
+        if !uri.is_empty() && !webview_uri_allowed(&uri) {
             eprintln!("rusty-blox: blocked a Roblox web view popup URL");
             return None;
+        }
+        if uri.is_empty() {
+            eprintln!("rusty-blox: creating a deferred Roblox WebView popup");
         }
 
         let popup = webkit6::WebView::builder()
@@ -190,6 +264,7 @@ fn install_popup_handling(
             .vexpand(true)
             .build();
         install_navigation_policy(&popup);
+        install_load_diagnostics(&popup);
         install_popup_handling(&popup, &popup_windows);
 
         let window = gtk4::Window::new();
@@ -231,13 +306,21 @@ fn install_popup_handling(
 }
 
 fn webview_uri_allowed(uri: &str) -> bool {
-    if uri == "about:blank" {
-        return true;
-    }
     let Ok(parsed) = gtk4::glib::Uri::parse(uri, gtk4::glib::UriFlags::NONE) else {
         return false;
     };
-    parsed.scheme().eq_ignore_ascii_case("https")
+    let scheme = parsed.scheme();
+    if scheme.eq_ignore_ascii_case("about") {
+        // Embedded frames commonly use these browser-internal documents.
+        // Other about: pages are not allowed, and these must not carry an
+        // authority or query that could disguise an external navigation.
+        return parsed.host().is_none()
+            && parsed.userinfo().is_none()
+            && parsed.port() == -1
+            && parsed.query().is_none()
+            && matches!(parsed.path().as_str(), "blank" | "srcdoc");
+    }
+    scheme.eq_ignore_ascii_case("https")
         && parsed.host().is_some_and(|host| !host.is_empty())
         && parsed.userinfo().is_none()
         && (parsed.port() == -1 || parsed.port() == 443)

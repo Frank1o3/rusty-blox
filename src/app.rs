@@ -6,6 +6,7 @@ use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceEvent, ElementState, Ime, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
+use winit::platform::x11::{WindowAttributesExtX11, WindowType};
 use winit::window::{CursorGrabMode, Window, WindowId};
 
 pub(crate) struct ClientApp {
@@ -25,6 +26,9 @@ pub(crate) struct ClientApp {
     text_generation: Option<u32>,
     text_value: String,
     text_cursor: usize,
+    text_selection_anchor: Option<usize>,
+    fast_flags_path: PathBuf,
+    fast_flags: serde_json::Value,
     forwarded_keys: HashSet<i32>,
     settings: crate::settings::Settings,
     game_mode: Option<crate::desktop::GameMode>,
@@ -54,9 +58,11 @@ impl ClientApp {
         config: roblox_runtime::RuntimeConfig,
         asset_dir: PathBuf,
         settings: crate::settings::Settings,
+        fast_flags_path: PathBuf,
     ) -> Self {
         #[cfg(feature = "webview")]
         eprintln!("rusty-blox: embedded WebKitGTK web view host enabled");
+        let fast_flags = config.fast_flags.clone();
         let session_dir = config
             .session
             .as_ref()
@@ -78,6 +84,9 @@ impl ClientApp {
             text_generation: None,
             text_value: String::new(),
             text_cursor: 0,
+            text_selection_anchor: None,
+            fast_flags_path,
+            fast_flags,
             forwarded_keys: HashSet::new(),
             settings,
             game_mode: None,
@@ -94,10 +103,16 @@ impl ClientApp {
 
 impl ClientApp {
     fn launch(&mut self, event_loop: &ActiveEventLoop) -> Result<(), String> {
-        // Start at 1280x720 when the display can fit it, scaling down to keep
-        // the window floating and fully visible on smaller screens. The user
-        // can resize it after launch.
-        let base = PhysicalSize::new(1280_u32, 720_u32);
+        // Use Roblox's saved StartScreenSize as the initial window dimensions.
+        // The compositor still decides whether the toplevel floats or tiles.
+        let base = configured_start_size(
+            &self
+                .config
+                .as_ref()
+                .ok_or("runtime config already consumed")?
+                .data_dir,
+        )
+        .unwrap_or_else(|| PhysicalSize::new(1280, 720));
         let size = event_loop
             .primary_monitor()
             .map(|monitor| {
@@ -111,18 +126,20 @@ impl ClientApp {
                 )
             })
             .unwrap_or(base);
+        let attributes = Window::default_attributes()
+            .with_title("roblox-runtime")
+            .with_resizable(true)
+            .with_maximized(false)
+            .with_inner_size(size)
+            // Dialog toplevels are normally placed as floating windows by
+            // X11 window managers. Wayland compositors do not expose a
+            // standardized client request to force floating placement.
+            .with_x11_window_type(vec![WindowType::Dialog]);
         let window = event_loop
-            .create_window(
-                Window::default_attributes()
-                    .with_title("roblox-runtime")
-                    .with_resizable(true)
-                    .with_maximized(false)
-                    .with_inner_size(size),
-            )
+            .create_window(attributes)
             .map_err(|error| format!("create host window: {error}"))?;
-        // Some window managers restore the previous size after applying the
-        // initial attributes. Reassert the requested floating size once the
-        // native window exists; this remains a request, not a size constraint.
+        // Some window managers restore their previous size after applying the
+        // initial attributes. Reassert the requested client size once mapped.
         window.set_maximized(false);
         let _ = window.request_inner_size(size);
         window.set_ime_allowed(true);
@@ -192,6 +209,11 @@ impl ClientApp {
 
 impl Drop for ClientApp {
     fn drop(&mut self) {
+        if let Err(error) =
+            crate::settings::save_fast_flags(&self.fast_flags_path, &self.fast_flags)
+        {
+            eprintln!("rusty-blox: could not save active FastFlags: {error}");
+        }
         if let Some(engine) = &self.engine {
             if let Some(session_dir) = &self.session_dir {
                 if let Err(error) = roblox_runtime::session::save(engine, session_dir) {
@@ -270,6 +292,9 @@ impl winit::application::ApplicationHandler for ClientApp {
             WindowEvent::KeyboardInput { event, .. } => {
                 if let PhysicalKey::Code(code) = event.physical_key {
                     if event.state == ElementState::Pressed {
+                        if self.modifiers.control_key() && self.text_shortcut(code) {
+                            return;
+                        }
                         self.editing_key(code);
                         // `Ime::Commit` covers composed input, but winit's
                         // ordinary key events also carry printable text. On
@@ -466,14 +491,19 @@ impl ClientApp {
         if roblox_runtime::jni::game_activity::focused_textbox().is_some() {
             self.text_value = roblox_runtime::jni::game_activity::textbox_text();
             let state_generation = roblox_runtime::jni::game_activity::ime_state_generation();
-            self.text_cursor = if state_generation != 0 {
-                roblox_runtime::jni::game_activity::ime_state_selection()
-                    .1
-                    .max(0) as usize
+            let selection = if state_generation != 0 {
+                Some(roblox_runtime::jni::game_activity::ime_state_selection())
             } else {
-                self.text_value.chars().count()
-            }
-            .min(self.text_value.chars().count());
+                None
+            };
+            self.text_cursor = selection
+                .map(|(_, end)| end.max(0) as usize)
+                .unwrap_or_else(|| self.text_value.chars().count())
+                .min(self.text_value.chars().count());
+            self.text_selection_anchor = selection.and_then(|(start, end)| {
+                let start = start.max(0) as usize;
+                (start != end.max(0) as usize).then_some(start)
+            });
             self.update_ime_cursor_area();
             eprintln!(
                 "[input] text box focused; seeded {} characters",
@@ -482,6 +512,7 @@ impl ClientApp {
         } else {
             self.text_value.clear();
             self.text_cursor = 0;
+            self.text_selection_anchor = None;
         }
     }
 
@@ -503,11 +534,13 @@ impl ClientApp {
         if roblox_runtime::jni::game_activity::focused_textbox().is_none() || committed.is_empty() {
             return;
         }
-        let byte_cursor = self
-            .text_value
-            .char_indices()
-            .nth(self.text_cursor)
-            .map_or(self.text_value.len(), |(offset, _)| offset);
+        if let Some((start, end)) = self.selection_range() {
+            self.text_value
+                .replace_range(self.char_byte_offset(start)..self.char_byte_offset(end), "");
+            self.text_cursor = start;
+            self.text_selection_anchor = None;
+        }
+        let byte_cursor = self.char_byte_offset(self.text_cursor);
         self.text_value.insert_str(byte_cursor, committed);
         self.text_cursor += committed.chars().count();
         self.send_text_to_engine();
@@ -524,13 +557,54 @@ impl ClientApp {
             return;
         }
         let mut changed = false;
-        match code {
-            KeyCode::ArrowLeft => self.text_cursor = self.text_cursor.saturating_sub(1),
-            KeyCode::ArrowRight => {
-                self.text_cursor = (self.text_cursor + 1).min(self.text_value.chars().count())
+        if let Some((start, end)) = self.selection_range() {
+            match code {
+                KeyCode::Backspace | KeyCode::Delete => {
+                    self.text_value.replace_range(
+                        self.char_byte_offset(start)..self.char_byte_offset(end),
+                        "",
+                    );
+                    self.text_cursor = start;
+                    self.text_selection_anchor = None;
+                    changed = true;
+                }
+                KeyCode::ArrowLeft | KeyCode::ArrowRight | KeyCode::Home | KeyCode::End => {
+                    self.text_cursor = if matches!(code, KeyCode::ArrowLeft | KeyCode::Home) {
+                        start
+                    } else {
+                        end
+                    };
+                    self.text_selection_anchor = None;
+                }
+                _ => return,
             }
-            KeyCode::Home => self.text_cursor = 0,
-            KeyCode::End => self.text_cursor = self.text_value.chars().count(),
+            if changed
+                || matches!(
+                    code,
+                    KeyCode::ArrowLeft | KeyCode::ArrowRight | KeyCode::Home | KeyCode::End
+                )
+            {
+                self.send_text_to_engine();
+            }
+            return;
+        }
+        match code {
+            KeyCode::ArrowLeft => {
+                self.text_cursor = self.text_cursor.saturating_sub(1);
+                self.text_selection_anchor = None;
+            }
+            KeyCode::ArrowRight => {
+                self.text_cursor = (self.text_cursor + 1).min(self.text_value.chars().count());
+                self.text_selection_anchor = None;
+            }
+            KeyCode::Home => {
+                self.text_cursor = 0;
+                self.text_selection_anchor = None;
+            }
+            KeyCode::End => {
+                self.text_cursor = self.text_value.chars().count();
+                self.text_selection_anchor = None;
+            }
             KeyCode::Backspace if self.text_cursor > 0 => {
                 self.text_cursor -= 1;
                 let byte = self
@@ -562,6 +636,60 @@ impl ClientApp {
         {
             self.send_text_to_engine();
         }
+    }
+
+    fn text_shortcut(&mut self, code: KeyCode) -> bool {
+        self.refresh_text_focus();
+        if roblox_runtime::jni::game_activity::focused_textbox().is_none() {
+            return false;
+        }
+        match code {
+            KeyCode::KeyA => {
+                self.text_selection_anchor = Some(0);
+                self.text_cursor = self.text_value.chars().count();
+            }
+            KeyCode::KeyC | KeyCode::KeyX => {
+                if let Some((start, end)) = self.selection_range() {
+                    let selected: String = self
+                        .text_value
+                        .chars()
+                        .skip(start)
+                        .take(end - start)
+                        .collect();
+                    if let Err(error) = clipboard_write(&selected) {
+                        eprintln!("rusty-blox: clipboard copy failed: {error}");
+                    }
+                    if code == KeyCode::KeyX {
+                        self.text_value.replace_range(
+                            self.char_byte_offset(start)..self.char_byte_offset(end),
+                            "",
+                        );
+                        self.text_cursor = start;
+                        self.text_selection_anchor = None;
+                        self.send_text_to_engine();
+                    }
+                }
+            }
+            KeyCode::KeyV => match clipboard_read() {
+                Ok(text) => self.commit_text(&text),
+                Err(error) => eprintln!("rusty-blox: clipboard paste failed: {error}"),
+            },
+            _ => return false,
+        }
+        true
+    }
+
+    fn selection_range(&self) -> Option<(usize, usize)> {
+        let anchor = self.text_selection_anchor?;
+        (anchor != self.text_cursor)
+            .then_some((anchor.min(self.text_cursor), anchor.max(self.text_cursor)))
+    }
+
+    fn char_byte_offset(&self, index: usize) -> usize {
+        self.text_value
+            .char_indices()
+            .nth(index)
+            .map_or(self.text_value.len(), |(offset, _)| offset)
     }
 
     fn send_text_to_engine(&self) {
@@ -793,6 +921,105 @@ impl ClientApp {
             eprintln!("rusty-blox: input forwarding failed: {error}");
         }
     }
+}
+
+fn configured_start_size(data_dir: &std::path::Path) -> Option<PhysicalSize<u32>> {
+    let path = data_dir.join("files/appData/GlobalBasicSettings_13.xml");
+    let xml = std::fs::read_to_string(path).ok()?;
+    let mut reader = quick_xml::Reader::from_str(&xml);
+    let mut in_start_size = false;
+    let mut component: Option<u8> = None;
+    let mut width = None;
+    let mut height = None;
+
+    loop {
+        match reader.read_event().ok()? {
+            quick_xml::events::Event::Start(element) => {
+                if !in_start_size && element.name().as_ref() == b"Vector2" {
+                    in_start_size = element.attributes().flatten().any(|attribute| {
+                        attribute.key.as_ref() == b"name"
+                            && attribute.value.as_ref() == b"StartScreenSize"
+                    });
+                } else if in_start_size {
+                    component = match element.name().as_ref() {
+                        b"X" => Some(b'X'),
+                        b"Y" => Some(b'Y'),
+                        _ => None,
+                    };
+                }
+            }
+            quick_xml::events::Event::Text(text) if in_start_size => {
+                if let Some(value) = text.decode().ok()?.trim().parse::<u32>().ok() {
+                    match component {
+                        Some(b'X') => width = Some(value),
+                        Some(b'Y') => height = Some(value),
+                        _ => {}
+                    }
+                }
+            }
+            quick_xml::events::Event::End(element) => match element.name().as_ref() {
+                b"X" | b"Y" => component = None,
+                b"Vector2" if in_start_size => {
+                    in_start_size = false;
+                    if let (Some(width), Some(height)) = (width, height) {
+                        if width > 0 && height > 0 {
+                            return Some(PhysicalSize::new(width, height));
+                        }
+                    }
+                }
+                _ => {}
+            },
+            quick_xml::events::Event::Eof => return None,
+            _ => {}
+        }
+    }
+}
+
+fn clipboard_write(text: &str) -> Result<(), String> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    for (program, args) in [
+        ("wl-copy", vec![]),
+        ("xclip", vec!["-selection", "clipboard"]),
+        ("xsel", vec!["--clipboard", "--input"]),
+    ] {
+        let Ok(mut child) = Command::new(program)
+            .args(args)
+            .stdin(Stdio::piped())
+            .spawn()
+        else {
+            continue;
+        };
+        if let Some(mut stdin) = child.stdin.take() {
+            if let Err(error) = stdin.write_all(text.as_bytes()) {
+                return Err(error.to_string());
+            }
+        }
+        return child
+            .wait()
+            .map_err(|error| error.to_string())?
+            .success()
+            .then_some(())
+            .ok_or_else(|| format!("{program} exited unsuccessfully"));
+    }
+    Err("no clipboard tool found (install wl-clipboard, xclip, or xsel)".into())
+}
+
+fn clipboard_read() -> Result<String, String> {
+    use std::process::Command;
+    for (program, args) in [
+        ("wl-paste", vec!["--no-newline"]),
+        ("xclip", vec!["-selection", "clipboard", "-o"]),
+        ("xsel", vec!["--clipboard", "--output"]),
+    ] {
+        let Ok(output) = Command::new(program).args(args).output() else {
+            continue;
+        };
+        if output.status.success() {
+            return String::from_utf8(output.stdout).map_err(|error| error.to_string());
+        }
+    }
+    Err("no readable clipboard tool found (install wl-clipboard, xclip, or xsel)".into())
 }
 
 fn android_mouse_button(button: MouseButton) -> Option<i32> {

@@ -87,23 +87,36 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     roblox_runtime::set_jnivm_cpp_fallback(user_settings.jnivm_cpp_fallback);
     let session_name = session_name.or_else(|| user_settings.session.clone());
-    let fast_flags = if let Some(path) = fast_flags_path {
-        serde_json::from_slice(&std::fs::read(path)?)?
-    } else {
-        serde_json::Value::Object(Default::default())
-    };
-    let mut fast_flags = fast_flags;
-    if let Some(limit) = user_settings.fps_limit {
+    let fast_flags_path = fast_flags_path.unwrap_or_else(settings::fast_flags_path);
+    if !fast_flags_path.exists() {
+        let parent = fast_flags_path
+            .parent()
+            .ok_or("FastFlags path has no parent")?;
+        std::fs::create_dir_all(parent)?;
+        std::fs::write(&fast_flags_path, "{}\n")?;
+    }
+    let mut fast_flags: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&fast_flags_path)?)?;
+    if let Some(limit) = settings::configured_frame_cap(&user_settings) {
         let flags = fast_flags
             .as_object_mut()
             .ok_or("Fast Flags document must be a JSON object")?;
-        flags
-            .entry("DFIntTaskSchedulerTargetFps")
-            .or_insert_with(|| limit.to_string().into());
-        if limit > 240 {
-            flags
-                .entry("FFlagTaskSchedulerLimitTargetFpsTo2402")
-                .or_insert_with(|| "False".into());
+        if limit == 0 {
+            flags.remove("DFIntTaskSchedulerTargetFps");
+            flags.remove("FFlagTaskSchedulerLimitTargetFpsTo2402");
+        } else {
+            flags.insert(
+                "DFIntTaskSchedulerTargetFps".to_owned(),
+                limit.to_string().into(),
+            );
+            if limit > 240 {
+                flags.insert(
+                    "FFlagTaskSchedulerLimitTargetFpsTo2402".to_owned(),
+                    "False".into(),
+                );
+            } else {
+                flags.remove("FFlagTaskSchedulerLimitTargetFpsTo2402");
+            }
         }
     }
     let apks = apk_arg
@@ -174,7 +187,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("Native libraries: {}", config.native_lib_dir.display());
 
     let event_loop = EventLoop::new()?;
-    let mut app = app::ClientApp::new(config, asset_dir, user_settings);
+    let mut app = app::ClientApp::new(config, asset_dir, user_settings, fast_flags_path);
     event_loop.run_app(&mut app)?;
     if let Some(error) = app.take_failure() {
         return Err(error.into());

@@ -32,6 +32,19 @@ client also accepts `--fast-flags FILE` and `--client-settings FILE` and passes
 those inputs in `RuntimeConfig`. `--host-libc` opts into the runtime's
 ABI-unsafe diagnostic symbol resolver; it is off by default.
 
+Without `--fast-flags`, the client loads `fast-flags.json` beside its settings
+file (`$XDG_CONFIG_HOME/rusty-blox`, or `~/.config/rusty-blox`). The FastFlags
+tab edits that JSON directly. General and Game frame-cap controls stay linked;
+the selected cap is applied to the loaded FastFlags and XML, and the active
+FastFlags JSON is written back on client exit. The Game tab exposes common Roblox settings as
+checkboxes and sliders backed by `data/files/appData/GlobalBasicSettings_13.xml`,
+without launching Roblox.
+The client uses `StartScreenSize` for its initial window size, limited to fit
+the display. On X11 it requests a floating dialog window; on Wayland, the
+compositor controls whether the window floats or tiles.
+Focused Roblox text boxes support Ctrl+A, Ctrl+C, Ctrl+X, and Ctrl+V; the system
+clipboard uses `wl-clipboard`, `xclip`, or `xsel` when available.
+
 Use `rusty-blox --settings` and open the Sessions tab to create a named login
 profile, select it, and click **Set as default session** to use it on later
 launches. The default is “No saved session”. A new profile signs in through
