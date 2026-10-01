@@ -187,6 +187,60 @@ pub(crate) fn fast_flags_path() -> PathBuf {
     path().with_file_name("fast-flags.json")
 }
 
+#[cfg(feature = "aimbot")]
+pub(crate) fn aimbot_config_path() -> PathBuf {
+    path().with_file_name("aimbot.json")
+}
+
+#[cfg(feature = "aimbot")]
+pub(crate) fn load_aimbot_config() -> extra::config::AimbotConfig {
+    let path = aimbot_config_path();
+    let config = match std::fs::read(&path) {
+        Ok(bytes) => match serde_json::from_slice::<extra::config::AimbotConfig>(&bytes) {
+            Ok(config) => config,
+            Err(error) => {
+                eprintln!(
+                    "rusty-blox: could not parse {}: {error}; using defaults",
+                    path.display()
+                );
+                return extra::config::AimbotConfig::default();
+            }
+        },
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let config = extra::config::AimbotConfig::default();
+            match serde_json::to_vec_pretty(&config) {
+                Ok(bytes) => {
+                    if let Err(error) = write_file(&path, &bytes) {
+                        eprintln!("rusty-blox: could not create {}: {error}", path.display());
+                    }
+                }
+                Err(error) => eprintln!(
+                    "rusty-blox: could not serialize {} defaults: {error}",
+                    path.display()
+                ),
+            }
+            config
+        }
+        Err(error) => {
+            eprintln!(
+                "rusty-blox: could not read {}: {error}; using defaults",
+                path.display()
+            );
+            return extra::config::AimbotConfig::default();
+        }
+    };
+
+    if let Err(error) = config.validate() {
+        eprintln!(
+            "rusty-blox: invalid {}: {error}; using defaults",
+            path.display()
+        );
+        extra::config::AimbotConfig::default()
+    } else {
+        config
+    }
+}
+
 pub(crate) fn game_settings_path() -> PathBuf {
     crate::client::managed_install_dir()
         .and_then(|path| path.parent().map(|parent| parent.to_path_buf()))
