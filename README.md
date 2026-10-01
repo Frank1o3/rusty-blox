@@ -58,7 +58,11 @@ libjnivm is the default. If Rust JNI is selected, the checkbox controls whether
 unhandled methods and fields can fall back to C++ libjnivm; fallback is enabled
 by default. The OpenGL ES swap interval can be set to off (0), on (1), or
 adaptive (-1, if the host driver supports it). These settings apply on the next
-launch.
+launch. The same tab selects a shared log level: level 1 shows standard startup
+steps, level 2 adds runtime logs, level 3 adds JNI VM logs, and level 4
+shows all launcher/runtime diagnostics, including key presses. The WASD option
+lets the most recently pressed key win when opposite directions are held; when
+it is released, a still-held opposite key resumes immediately.
 
 For development, `USE_EXPERIMENTAL_JNIVM=1` or `true` overrides the saved JNI
 backend choice and enables Rust JNI for that launch. `./dev.sh` uses that

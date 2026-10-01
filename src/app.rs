@@ -30,6 +30,8 @@ pub(crate) struct ClientApp {
     fast_flags_path: PathBuf,
     fast_flags: serde_json::Value,
     forwarded_keys: HashSet<i32>,
+    movement_pressed: Vec<KeyCode>,
+    movement_active: [Option<KeyCode>; 2],
     settings: crate::settings::Settings,
     game_mode: Option<crate::desktop::GameMode>,
     discord_presence: Option<crate::desktop::DiscordPresence>,
@@ -88,6 +90,8 @@ impl ClientApp {
             fast_flags_path,
             fast_flags,
             forwarded_keys: HashSet::new(),
+            movement_pressed: Vec::new(),
+            movement_active: [None, None],
             settings,
             game_mode: None,
             discord_presence: None,
@@ -247,6 +251,9 @@ impl winit::application::ApplicationHandler for ClientApp {
             }
             WindowEvent::Focused(focused) => {
                 self.window_focused = focused;
+                if !focused {
+                    self.clear_movement_keys(event_loop);
+                }
                 if !focused && self.cursor_locked {
                     if let Some(window) = self.window.as_ref() {
                         let _ = window.set_cursor_grab(CursorGrabMode::None);
@@ -322,7 +329,19 @@ impl winit::application::ApplicationHandler for ClientApp {
                             self.commit_text(&printable);
                         }
                     }
-                    if let (Some(key_code), Some(evdev_code)) =
+                    let text_box_focused =
+                        roblox_runtime::jni::game_activity::focused_textbox().is_some();
+                    if text_box_focused
+                        && (self.movement_active[0].is_some() || self.movement_active[1].is_some())
+                    {
+                        self.clear_movement_keys(event_loop);
+                    }
+                    let movement_key = self.settings.wasd_last_pressed
+                        && !text_box_focused
+                        && movement_axis(code).is_some();
+                    if movement_key {
+                        self.update_movement_key(code, event.state, event_loop);
+                    } else if let (Some(key_code), Some(evdev_code)) =
                         (android_key_code(code), evdev_key_code(code))
                     {
                         self.forward_key(
@@ -912,6 +931,73 @@ impl ClientApp {
         self.record_input_result(result, event_loop);
     }
 
+    fn update_movement_key(
+        &mut self,
+        code: KeyCode,
+        state: ElementState,
+        event_loop: &ActiveEventLoop,
+    ) {
+        if state == ElementState::Pressed {
+            // Key repeat must not make a held direction jump ahead of a newer
+            // opposing key.
+            if !self.movement_pressed.contains(&code) {
+                self.movement_pressed.push(code);
+            }
+        } else {
+            self.movement_pressed.retain(|pressed| *pressed != code);
+        }
+
+        for axis in 0..2 {
+            let next = self
+                .movement_pressed
+                .iter()
+                .rev()
+                .copied()
+                .find(|pressed| movement_axis(*pressed) == Some(axis));
+            if self.movement_active[axis] == next {
+                continue;
+            }
+            if let Some(previous) = self.movement_active[axis] {
+                self.send_movement_key(previous, false, event_loop);
+            }
+            if let Some(next) = next {
+                self.send_movement_key(next, true, event_loop);
+            }
+            self.movement_active[axis] = next;
+        }
+    }
+
+    fn clear_movement_keys(&mut self, event_loop: &ActiveEventLoop) {
+        let active = std::mem::replace(&mut self.movement_active, [None, None]);
+        for code in active.into_iter().flatten() {
+            self.send_movement_key(code, false, event_loop);
+        }
+        self.movement_pressed.clear();
+    }
+
+    fn send_movement_key(&mut self, code: KeyCode, down: bool, event_loop: &ActiveEventLoop) {
+        let (Some(key_code), Some(evdev_code)) = (android_key_code(code), evdev_key_code(code))
+        else {
+            return;
+        };
+        let unicode_char = match code {
+            KeyCode::KeyW => 'w',
+            KeyCode::KeyA => 'a',
+            KeyCode::KeyS => 's',
+            KeyCode::KeyD => 'd',
+            _ => return,
+        } as i32;
+        self.forward_key(
+            down,
+            key_code,
+            evdev_code,
+            unicode_char,
+            self.modifiers,
+            false,
+            event_loop,
+        );
+    }
+
     fn record_input_result(
         &mut self,
         result: Option<Result<(), String>>,
@@ -1027,6 +1113,14 @@ fn android_mouse_button(button: MouseButton) -> Option<i32> {
         MouseButton::Left => Some(0),
         MouseButton::Right => Some(1),
         MouseButton::Middle => Some(2),
+        _ => None,
+    }
+}
+
+fn movement_axis(code: KeyCode) -> Option<usize> {
+    match code {
+        KeyCode::KeyA | KeyCode::KeyD => Some(0),
+        KeyCode::KeyW | KeyCode::KeyS => Some(1),
         _ => None,
     }
 }

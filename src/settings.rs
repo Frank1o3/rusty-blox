@@ -7,6 +7,12 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 const JNI_BACKENDS: &[(&str, &str)] = &[("cpp", "C++ libjnivm (default)"), ("rust", "Rust JNI VM")];
+const LOG_LEVELS: &[(&str, &str)] = &[
+    ("1", "1 — Standard startup logging"),
+    ("2", "2 — Standard + runtime"),
+    ("3", "3 — Standard + runtime + JNI VM"),
+    ("4", "4 — All logs (including key presses)"),
+];
 const RENDERERS: &[(&str, &str)] = &[
     ("auto", "Automatic"),
     ("vulkan", "Vulkan"),
@@ -145,6 +151,8 @@ pub(crate) struct Settings {
     pub jnivm_cpp_fallback: bool,
     pub fps_limit: Option<u32>,
     pub session: Option<String>,
+    pub log_level: u8,
+    pub wasd_last_pressed: bool,
 }
 
 impl Default for Settings {
@@ -161,6 +169,8 @@ impl Default for Settings {
             jnivm_cpp_fallback: true,
             fps_limit: None,
             session: None,
+            log_level: 1,
+            wasd_last_pressed: false,
         }
     }
 }
@@ -249,6 +259,14 @@ pub(crate) fn run_ui() -> Result<(), String> {
         heading.add_css_class("title-2");
         heading.set_halign(gtk::Align::Start);
         settings_page.append(&heading);
+
+        let log_level = choice_dropdown(LOG_LEVELS, &settings.log_level.to_string());
+        settings_page.append(&labeled("Runtime log level", &log_level));
+        let wasd_last_pressed = gtk::CheckButton::with_label(
+            "Prioritize the last pressed WASD direction while opposite keys are held",
+        );
+        wasd_last_pressed.set_active(settings.wasd_last_pressed);
+        settings_page.append(&wasd_last_pressed);
 
         let jni_backend = choice_dropdown(
             JNI_BACKENDS,
@@ -391,6 +409,10 @@ pub(crate) fn run_ui() -> Result<(), String> {
                     .selected()
                     .checked_sub(1)
                     .and_then(|index| session_names_for_save.borrow().get(index as usize).cloned()),
+                log_level: selected_choice_id(&log_level, LOG_LEVELS)
+                    .and_then(|value| value.parse().ok())
+                    .unwrap_or(1),
+                wasd_last_pressed: wasd_last_pressed.is_active(),
             };
             let settings_error = save(&value).err();
             let mut errors = sync_frame_cap_fallbacks(limit);

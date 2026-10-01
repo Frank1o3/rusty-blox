@@ -28,6 +28,7 @@ pub(crate) fn initialize_client(
         .to_str()
         .ok_or_else(|| "cache directory path is not UTF-8".to_owned())?;
 
+    eprintln!("[startup] init asset manager");
     call_native(
         engine,
         "Java_com_roblox_client_JNIAAssetManagerSetup_initNative",
@@ -36,6 +37,7 @@ pub(crate) fn initialize_client(
             unsafe { roblox_runtime::jni::game_activity::asset_manager_init(f) }
         },
     )?;
+    eprintln!("[startup] init storage manager");
     call_native(
         engine,
         "Java_com_roblox_client_LocalStorageManager_initStorageManagerNativeV3",
@@ -44,6 +46,7 @@ pub(crate) fn initialize_client(
             unsafe { roblox_runtime::jni::game_activity::storage_init(f, &files, cache) }
         },
     )?;
+    eprintln!("[startup] set asset path");
     call_native(
         engine,
         "Java_com_roblox_client_startup_MainGameActivity_nativeSetAssetPath",
@@ -60,6 +63,7 @@ pub(crate) fn initialize_client(
             }
         },
     )?;
+    eprintln!("[startup] set init params");
     call_native(
         engine,
         "Java_com_roblox_client_startup_MainGameActivity_nativeAppBridgeSetInitParams",
@@ -70,6 +74,7 @@ pub(crate) fn initialize_client(
         },
     )?;
 
+    eprintln!("[startup] nativeGameGlobalInit");
     call_native(
         engine,
         "Java_com_roblox_engine_jni_NativeGLInterface_nativeGameGlobalInit",
@@ -78,6 +83,7 @@ pub(crate) fn initialize_client(
             unsafe { roblox_runtime::jni::game_activity::appbridge_call_bare(f) }
         },
     )?;
+    eprintln!("[startup] nativeUpdateAdapterInit");
     call_native(
         engine,
         "Java_com_roblox_engine_jni_NativeGLInterface_nativeUpdateAdapterInit",
@@ -86,6 +92,7 @@ pub(crate) fn initialize_client(
             unsafe { roblox_runtime::jni::game_activity::appbridge_call_bare(f) }
         },
     )?;
+    eprintln!("[startup] nativeAppBridgeV2InitWithParams");
     call_native(
         engine,
         "Java_com_roblox_engine_jni_NativeGLInterface_nativeAppBridgeV2InitWithParams",

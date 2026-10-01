@@ -1,3 +1,12 @@
+macro_rules! eprintln {
+    () => {{
+        roblox_logging::emit(String::new());
+    }};
+    ($($arg:tt)*) => {{
+        roblox_logging::emit(format!($($arg)*));
+    }};
+}
+
 mod app;
 mod client;
 mod client_settings;
@@ -14,7 +23,7 @@ use winit::event_loop::EventLoop;
 
 fn main() {
     if let Err(error) = run() {
-        eprintln!("rusty-blox: {error}");
+        roblox_logging::emit_error(format!("rusty-blox: {error}"));
         std::process::exit(1);
     }
 }
@@ -72,6 +81,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&lock_root)?;
     let _instance_lock = InstanceLock::acquire(&lock_root.join("roblox-instance.lock"))?;
     let user_settings = settings::load();
+    let log_level = user_settings.log_level.clamp(1, 4);
+    unsafe {
+        std::env::set_var("RUSTY_BLOX_LOG_LEVEL", log_level.to_string());
+    }
     let env_requests_rust = std::env::var("USE_EXPERIMENTAL_JNIVM")
         .is_ok_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "true" | "1"));
     let use_rust_jnivm = user_settings.rust_jnivm || env_requests_rust;

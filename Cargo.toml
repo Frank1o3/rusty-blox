@@ -15,6 +15,7 @@
     libloading="0.9.0"
     quick-xml="0.41.0"
     roblox-runtime={path="roblox-runtime"}
+    roblox-logging={path="roblox-runtime/crates/logging"}
     serde={version="1", features=["derive"]}
     serde_json="1.0.151"
     ureq="3.3.0"
