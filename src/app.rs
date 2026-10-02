@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use crate::host_window::SurfaceOwner;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
@@ -47,7 +48,7 @@ pub(crate) struct ClientApp {
     detection_enabled: bool,
     overlay_enabled: bool,
     triggerbot_enabled: bool,
-    triggerbot_target_active: bool,
+    last_trigger_click: Option<Instant>,
     pressed_key_codes: HashSet<KeyCode>,
     consumed_detection_hotkeys: HashSet<KeyCode>,
     game_mode: Option<crate::desktop::GameMode>,
@@ -65,7 +66,6 @@ impl ClientApp {
                     eprintln!("[detection] enabled");
                 } else {
                     self.triggerbot_enabled = false;
-                    self.triggerbot_target_active = false;
                     eprintln!("[detection] disabled");
                 }
                 self.update_capture_state();
@@ -89,7 +89,6 @@ impl ClientApp {
             }
             KeyCode::F3 => {
                 self.triggerbot_enabled = !self.triggerbot_enabled;
-                self.triggerbot_target_active = false;
                 eprintln!(
                     "[detection] triggerbot {}",
                     if self.triggerbot_enabled {
@@ -109,11 +108,24 @@ impl ClientApp {
         roblox_runtime::graphics::set_capture_enabled(enabled);
         if !enabled {
             self.detection_worker.reset();
-            self.triggerbot_target_active = false;
         }
     }
 
     fn pump_detection(&mut self, event_loop: &ActiveEventLoop) {
+        if let Some(config) = self.detection_worker.take_config_update() {
+            if config.triggerbot != self.detection_config.triggerbot {
+                self.triggerbot_enabled = config.triggerbot;
+                eprintln!(
+                    "[detection] triggerbot {} from detection.json",
+                    if self.triggerbot_enabled {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    }
+                );
+            }
+            self.detection_config = config;
+        }
         while let Some(frame) = roblox_runtime::graphics::take_captured_frame() {
             self.detection_worker.submit(frame);
         }
@@ -128,8 +140,6 @@ impl ClientApp {
         if self.detection_enabled && self.window_focused {
             let frame_center = (result.width as f32 / 2.0, result.height as f32 / 2.0);
             self.apply_detection(result.detection.as_ref(), frame_center, event_loop);
-        } else {
-            self.triggerbot_target_active = false;
         }
     }
 
@@ -140,7 +150,6 @@ impl ClientApp {
         event_loop: &ActiveEventLoop,
     ) {
         let Some(detection) = detection else {
-            self.triggerbot_target_active = false;
             return;
         };
 
@@ -158,12 +167,17 @@ impl ClientApp {
             self.forward_mouse_move(position, delta, event_loop);
         }
 
-        if self.triggerbot_enabled && !self.triggerbot_target_active {
+        let target_dx = detection.center.x - frame_center.0;
+        let target_dy = detection.center.y - frame_center.1;
+        let within_trigger_distance = target_dx * target_dx + target_dy * target_dy
+            <= (self.detection_config.trigger_dist as f32).powi(2);
+        let click_ready = self.last_trigger_click.is_none_or(|last| {
+            last.elapsed() >= Duration::from_millis(self.detection_config.trigger_delay)
+        });
+        if self.triggerbot_enabled && within_trigger_distance && click_ready {
             self.forward_mouse_button(self.cursor, true, 0, event_loop);
             self.forward_mouse_button(self.cursor, false, 0, event_loop);
-            self.triggerbot_target_active = true;
-        } else if !self.triggerbot_enabled {
-            self.triggerbot_target_active = false;
+            self.last_trigger_click = Some(Instant::now());
         }
     }
 
@@ -212,7 +226,11 @@ impl ClientApp {
             .session
             .as_ref()
             .map(|session| session.directory().to_path_buf());
-        let detection_worker = crate::detection::DetectionWorker::new(detection_config.clone());
+        let initial_triggerbot = detection_config.triggerbot;
+        let detection_worker = crate::detection::DetectionWorker::new(
+            detection_config.clone(),
+            crate::settings::detection_config_path(),
+        );
         Self {
             config: Some(config),
             asset_dir,
@@ -242,8 +260,8 @@ impl ClientApp {
             detection_worker,
             detection_enabled: false,
             overlay_enabled: false,
-            triggerbot_enabled: false,
-            triggerbot_target_active: false,
+            triggerbot_enabled: initial_triggerbot,
+            last_trigger_click: None,
             pressed_key_codes: HashSet::new(),
             consumed_detection_hotkeys: HashSet::new(),
             game_mode: None,
@@ -420,7 +438,6 @@ impl winit::application::ApplicationHandler for ClientApp {
                     self.clear_movement_keys(event_loop);
                     self.pressed_key_codes.clear();
                     self.consumed_detection_hotkeys.clear();
-                    self.triggerbot_target_active = false;
                     self.detection_worker.reset();
                     self.update_detection_overlay(0, 0, None);
                 }
