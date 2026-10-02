@@ -56,10 +56,12 @@ impl WebViewHost {
         reload.connect_clicked(move |_| reload_view.reload());
         header.pack_end(&reload);
         let close = gtk4::Button::from_icon_name("window-close-symbolic");
-        let close_window = window.clone();
+        let close_window = window.downgrade();
         close.connect_clicked(move |_| {
-            close_window.unfullscreen();
-            close_window.set_visible(false);
+            if let Some(window) = close_window.upgrade() {
+                window.unfullscreen();
+                window.set_visible(false);
+            }
         });
         header.pack_end(&close);
         window.set_titlebar(Some(&header));

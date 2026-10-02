@@ -9,6 +9,14 @@ use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::platform::x11::{WindowAttributesExtX11, WindowType};
 use winit::window::{CursorGrabMode, Window, WindowId};
 
+#[derive(Default)]
+struct InputNatives {
+    mouse_move: Option<*mut std::ffi::c_void>,
+    mouse_button: Option<*mut std::ffi::c_void>,
+    mouse_wheel: Option<*mut std::ffi::c_void>,
+    key_event: Option<*mut std::ffi::c_void>,
+}
+
 pub(crate) struct ClientApp {
     config: Option<roblox_runtime::RuntimeConfig>,
     asset_dir: PathBuf,
@@ -16,6 +24,7 @@ pub(crate) struct ClientApp {
     window: Option<Window>,
     surface_owner: Option<SurfaceOwner>,
     engine: Option<roblox_runtime::LoadedEngine>,
+    input_natives: InputNatives,
     game_activity: Option<i64>,
     failure: Option<String>,
     cursor: (f32, f32),
@@ -41,9 +50,7 @@ pub(crate) struct ClientApp {
 
 impl ClientApp {
     fn forward_locked_mouse_move(&self, position: (f32, f32), delta: (f32, f32)) {
-        let Some(native) = self.engine.as_ref().and_then(|engine| {
-            engine.symbol("Java_com_roblox_engine_jni_NativeInputInterface_nativePassMouseMove")
-        }) else {
+        let Some(native) = self.input_natives.mouse_move else {
             return;
         };
         // SAFETY: this is the live mouse-move export from the loaded engine.
@@ -76,6 +83,7 @@ impl ClientApp {
             window: None,
             surface_owner: None,
             engine: None,
+            input_natives: InputNatives::default(),
             game_activity: None,
             failure: None,
             cursor: (0.0, 0.0),
@@ -205,6 +213,16 @@ impl ClientApp {
         println!("GameActivity initialized; handle={game_activity}");
         crate::startup::initialize_client(&engine, &config, &self.asset_dir, game_activity, size)?;
         roblox_runtime::webview::arm(&engine);
+        self.input_natives = InputNatives {
+            mouse_move: engine
+                .symbol("Java_com_roblox_engine_jni_NativeInputInterface_nativePassMouseMove"),
+            mouse_button: engine
+                .symbol("Java_com_roblox_engine_jni_NativeInputInterface_nativePassMouseButton"),
+            mouse_wheel: engine
+                .symbol("Java_com_roblox_engine_jni_NativeInputInterface_nativePassMouseWheel"),
+            key_event: engine
+                .symbol("Java_com_roblox_engine_jni_NativeGLInterface_nativePassKeyEvent"),
+        };
         self.engine = Some(engine);
         self.game_activity = Some(game_activity);
         Ok(())
@@ -806,17 +824,13 @@ impl ClientApp {
         delta: (f32, f32),
         event_loop: &ActiveEventLoop,
     ) {
-        let result = self.engine.as_ref().and_then(|engine| {
-            engine
-                .symbol("Java_com_roblox_engine_jni_NativeInputInterface_nativePassMouseMove")
-                .map(|native| {
-                    // SAFETY: this export belongs to the live engine library.
-                    unsafe {
-                        roblox_runtime::jni::game_activity::pass_mouse_move(
-                            native, position.0, position.1, delta.0, delta.1,
-                        )
-                    }
-                })
+        let result = self.input_natives.mouse_move.map(|native| {
+            // SAFETY: this export belongs to the live engine library.
+            unsafe {
+                roblox_runtime::jni::game_activity::pass_mouse_move(
+                    native, position.0, position.1, delta.0, delta.1,
+                )
+            }
         });
         self.record_input_result(result, event_loop);
     }
@@ -828,17 +842,13 @@ impl ClientApp {
         button: i32,
         event_loop: &ActiveEventLoop,
     ) {
-        let result = self.engine.as_ref().and_then(|engine| {
-            engine
-                .symbol("Java_com_roblox_engine_jni_NativeInputInterface_nativePassMouseButton")
-                .map(|native| {
-                    // SAFETY: this export belongs to the live engine library.
-                    unsafe {
-                        roblox_runtime::jni::game_activity::pass_mouse_button(
-                            native, position.0, position.1, down, button,
-                        )
-                    }
-                })
+        let result = self.input_natives.mouse_button.map(|native| {
+            // SAFETY: this export belongs to the live engine library.
+            unsafe {
+                roblox_runtime::jni::game_activity::pass_mouse_button(
+                    native, position.0, position.1, down, button,
+                )
+            }
         });
         self.record_input_result(result, event_loop);
     }
@@ -849,17 +859,13 @@ impl ClientApp {
         delta: f32,
         event_loop: &ActiveEventLoop,
     ) {
-        let result = self.engine.as_ref().and_then(|engine| {
-            engine
-                .symbol("Java_com_roblox_engine_jni_NativeInputInterface_nativePassMouseWheel")
-                .map(|native| {
-                    // SAFETY: this export belongs to the live engine library.
-                    unsafe {
-                        roblox_runtime::jni::game_activity::pass_mouse_wheel(
-                            native, position.0, position.1, delta,
-                        )
-                    }
-                })
+        let result = self.input_natives.mouse_wheel.map(|native| {
+            // SAFETY: this export belongs to the live engine library.
+            unsafe {
+                roblox_runtime::jni::game_activity::pass_mouse_wheel(
+                    native, position.0, position.1, delta,
+                )
+            }
         });
         self.record_input_result(result, event_loop);
     }
@@ -893,21 +899,17 @@ impl ClientApp {
         };
         let result = send_to_game
             .then(|| {
-                self.engine.as_ref().and_then(|engine| {
-                    engine
-                        .symbol("Java_com_roblox_engine_jni_NativeGLInterface_nativePassKeyEvent")
-                        .map(|native| {
-                            // SAFETY: this export belongs to the live engine library.
-                            unsafe {
-                                roblox_runtime::jni::game_activity::pass_key_event(
-                                    native,
-                                    down,
-                                    evdev_code,
-                                    android_modifiers,
-                                    repeat,
-                                )
-                            }
-                        })
+                self.input_natives.key_event.map(|native| {
+                    // SAFETY: this export belongs to the live engine library.
+                    unsafe {
+                        roblox_runtime::jni::game_activity::pass_key_event(
+                            native,
+                            down,
+                            evdev_code,
+                            android_modifiers,
+                            repeat,
+                        )
+                    }
                 })
             })
             .flatten();
