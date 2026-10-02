@@ -358,9 +358,14 @@ pub(crate) fn run_ui() -> Result<(), String> {
         let status = gtk::Label::new(None);
         status.set_halign(gtk::Align::Start);
         settings_page.append(&status);
-        let sessions_root = crate::client::managed_install_dir()
-            .unwrap_or_else(|| PathBuf::from(".").join("rusty-blox"))
-            .join("sessions");
+        let sessions_root = if let Some(managed) = crate::client::managed_install_dir() {
+            if let Err(error) = crate::client::migrate_legacy_sessions(&managed) {
+                eprintln!("rusty-blox: could not migrate saved sessions: {error}");
+            }
+            crate::client::sessions_root(&managed)
+        } else {
+            PathBuf::from("rusty-blox").join("sessions")
+        };
         let initial_sessions =
             roblox_runtime::session::Session::list(&sessions_root).unwrap_or_default();
         let labels: Vec<_> = std::iter::once("No saved session".to_owned())

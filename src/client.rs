@@ -40,6 +40,57 @@ pub fn managed_install_dir() -> Option<PathBuf> {
     env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share/rusty-blox/roblox"))
 }
 
+/// Session data lives beside the replaceable APK import so a client update
+/// cannot remove named profiles when the managed install is republished.
+pub fn sessions_root(managed_dir: &Path) -> PathBuf {
+    managed_dir
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("sessions")
+}
+
+/// Move profiles created by older versions out of the replaceable install
+/// directory. Preserve any files already present in the new location.
+pub fn migrate_legacy_sessions(managed_dir: &Path) -> io::Result<()> {
+    let legacy_root = managed_dir.join("sessions");
+    if !legacy_root.is_dir() {
+        return Ok(());
+    }
+    let sessions_root = sessions_root(managed_dir);
+    fs::create_dir_all(&sessions_root)?;
+    for entry in fs::read_dir(&legacy_root)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+        let destination = sessions_root.join(entry.file_name());
+        if !destination.exists() {
+            fs::rename(entry.path(), destination)?;
+            continue;
+        }
+        for file in fs::read_dir(entry.path())? {
+            let file = file?;
+            if !file.file_type()?.is_file() {
+                continue;
+            }
+            let target = destination.join(file.file_name());
+            if target.exists() {
+                continue;
+            }
+            fs::copy(file.path(), &target)?;
+            #[cfg(unix)]
+            if matches!(
+                file.file_name().to_str(),
+                Some("roblox-cookies" | "roblox-identity")
+            ) {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(target, fs::Permissions::from_mode(0o600))?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Import an APK and its x86-64 shared libraries into a client-owned location.
 ///
 /// The import is assembled in a sibling staging directory and only published

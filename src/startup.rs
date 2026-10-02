@@ -7,6 +7,8 @@ pub(crate) fn initialize_client(
     game_activity: i64,
     size: PhysicalSize<u32>,
 ) -> Result<(), String> {
+    roblox_runtime::session::initialize(config.session.as_ref().map(|session| session.directory()));
+
     // The engine's platform asset folder is the APK's `assets/content`
     // directory, not the extraction root. roblox-runtime's launcher passes this same
     // subdirectory to MainGameActivity and App Bridge.
