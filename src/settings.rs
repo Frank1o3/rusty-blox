@@ -187,6 +187,10 @@ pub(crate) fn fast_flags_path() -> PathBuf {
     path().with_file_name("fast-flags.json")
 }
 
+pub(crate) fn detection_config_path() -> PathBuf {
+    path().with_file_name("detection.json")
+}
+
 pub(crate) fn game_settings_path() -> PathBuf {
     crate::client::managed_install_dir()
         .and_then(|path| path.parent().map(|parent| parent.to_path_buf()))

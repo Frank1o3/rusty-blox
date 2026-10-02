@@ -29,14 +29,8 @@ fn trace_overlay(stage: &str) {
 type Proxy = c_void;
 type Interface = c_void;
 type Queue = c_void;
-type MarshalFlags = unsafe extern "C" fn(
-    *mut Proxy,
-    u32,
-    *const Interface,
-    u32,
-    u32,
-    ...,
-) -> *mut Proxy;
+type MarshalFlags =
+    unsafe extern "C" fn(*mut Proxy, u32, *const Interface, u32, u32, ...) -> *mut Proxy;
 type AddListener = unsafe extern "C" fn(*mut Proxy, *const *const c_void, *mut c_void) -> c_int;
 type SetQueue = unsafe extern "C" fn(*mut Proxy, *mut Queue);
 type ProxyVersion = unsafe extern "C" fn(*mut Proxy) -> u32;
@@ -142,7 +136,8 @@ unsafe extern "C" fn registry_global(
     }
 }
 
-unsafe extern "C" fn registry_global_remove(_data: *mut c_void, _registry: *mut Proxy, _name: u32) {}
+unsafe extern "C" fn registry_global_remove(_data: *mut c_void, _registry: *mut Proxy, _name: u32) {
+}
 
 unsafe extern "C" fn buffer_release(data: *mut c_void, _buffer: *mut Proxy) {
     trace_overlay("buffer release callback: begin");
@@ -257,13 +252,7 @@ impl ShmBuffer {
         // wl_shm_pool.destroy is request 1 and the pool no longer needs a
         // client-side proxy once its buffer has been created.
         unsafe {
-            marshal(
-                pool,
-                1,
-                ptr::null(),
-                1,
-                WL_MARSHAL_FLAG_DESTROY,
-            );
+            marshal(pool, 1, ptr::null(), 1, WL_MARSHAL_FLAG_DESTROY);
         }
         if buffer.is_null() {
             // SAFETY: the mapping was created above and no buffer references it.
@@ -288,13 +277,7 @@ impl ShmBuffer {
         };
         if status != 0 {
             unsafe {
-                marshal(
-                    buffer,
-                    0,
-                    ptr::null(),
-                    1,
-                    WL_MARSHAL_FLAG_DESTROY,
-                );
+                marshal(buffer, 0, ptr::null(), 1, WL_MARSHAL_FLAG_DESTROY);
                 libc::munmap(mapping, size as usize);
             }
             return Err("could not install the Wayland text buffer listener".to_owned());
@@ -365,7 +348,9 @@ impl WaylandTextOverlay {
         };
         let roundtrip_queue = unsafe {
             *library
-                .get::<unsafe extern "C" fn(*mut Proxy, *mut Queue) -> c_int>(b"wl_display_roundtrip_queue\0")
+                .get::<unsafe extern "C" fn(*mut Proxy, *mut Queue) -> c_int>(
+                    b"wl_display_roundtrip_queue\0",
+                )
                 .map_err(|error| format!("resolve wl_display_roundtrip_queue: {error}"))?
         };
         let dispatch_pending_fn = unsafe {
@@ -474,8 +459,13 @@ impl WaylandTextOverlay {
         // so its listener and stack BindContext cannot be reached later.
         unsafe { proxy_destroy(registry) };
         let bindings = context.bindings;
-        if bindings.compositor.is_null() || bindings.subcompositor.is_null() || bindings.shm.is_null() {
-            return Err("Wayland compositor, subcompositor, or shared memory is unavailable".to_owned());
+        if bindings.compositor.is_null()
+            || bindings.subcompositor.is_null()
+            || bindings.shm.is_null()
+        {
+            return Err(
+                "Wayland compositor, subcompositor, or shared memory is unavailable".to_owned(),
+            );
         }
         // Bind-created proxies inherit the registry's private queue.
         let compositor = bindings.compositor;
@@ -608,7 +598,14 @@ impl WaylandTextOverlay {
         unsafe {
             (self.marshal)(self.subsurface, 1, ptr::null(), 1, 0, x, y);
             if self.compositor_version >= 3 {
-                (self.marshal)(self.surface, 8, ptr::null(), self.compositor_version, 0, scale as c_int);
+                (self.marshal)(
+                    self.surface,
+                    8,
+                    ptr::null(),
+                    self.compositor_version,
+                    0,
+                    scale as c_int,
+                );
             }
             (self.marshal)(
                 self.surface,
@@ -664,12 +661,9 @@ impl WaylandTextOverlay {
     }
 
     fn buffer_for(&mut self, width: u32, height: u32) -> Result<Option<usize>, String> {
-        if let Some((index, _)) = self
-            .buffers
-            .iter()
-            .enumerate()
-            .find(|(_, buffer)| buffer.width == width && buffer.height == height && buffer.is_released())
-        {
+        if let Some((index, _)) = self.buffers.iter().enumerate().find(|(_, buffer)| {
+            buffer.width == width && buffer.height == height && buffer.is_released()
+        }) {
             return Ok(Some(index));
         }
         if self.buffers.len() >= MAX_BUFFERS {
@@ -696,13 +690,21 @@ impl WaylandTextOverlay {
         info: RawTextBoxInfo,
     ) -> Result<(), String> {
         let buffer = &mut self.buffers[index];
-        let mut image = ImageSurface::create(Format::ARgb32, buffer.width as i32, buffer.height as i32)
-            .map_err(|error| format!("create text overlay image: {error}"))?;
-        let context = Context::new(&image).map_err(|error| format!("create text overlay painter: {error}"))?;
+        let mut image =
+            ImageSurface::create(Format::ARgb32, buffer.width as i32, buffer.height as i32)
+                .map_err(|error| format!("create text overlay image: {error}"))?;
+        let context = Context::new(&image)
+            .map_err(|error| format!("create text overlay painter: {error}"))?;
         context.set_operator(Operator::Clear);
-        context.paint().map_err(|error| format!("clear text overlay: {error}"))?;
+        context
+            .paint()
+            .map_err(|error| format!("clear text overlay: {error}"))?;
         context.set_operator(Operator::Over);
-        let color = if info.text_color == 0 { 0x00ff_ffff } else { info.text_color as u32 };
+        let color = if info.text_color == 0 {
+            0x00ff_ffff
+        } else {
+            info.text_color as u32
+        };
         context.set_source_rgb(
             ((color >> 16) & 0xff) as f64 / 255.0,
             ((color >> 8) & 0xff) as f64 / 255.0,
@@ -745,8 +747,15 @@ impl WaylandTextOverlay {
                 .text_extents(&display_text[..caret_byte])
                 .map_err(|error| format!("measure text caret: {error}"))?
                 .x_advance();
-        context.rectangle(caret_x.floor(), 2.0, 1.0, (buffer.height as f64 - 4.0).max(1.0));
-        context.fill().map_err(|error| format!("draw text caret: {error}"))?;
+        context.rectangle(
+            caret_x.floor(),
+            2.0,
+            1.0,
+            (buffer.height as f64 - 4.0).max(1.0),
+        );
+        context
+            .fill()
+            .map_err(|error| format!("draw text caret: {error}"))?;
         drop(context);
         image.flush();
         let data = image
@@ -755,7 +764,11 @@ impl WaylandTextOverlay {
         // SAFETY: the mapping is writable for width*height*4 bytes and Cairo's
         // ARGB32 surface has the same row-major native-endian pixel format.
         unsafe {
-            ptr::copy_nonoverlapping(data.as_ptr(), buffer.mapping.cast::<u8>(), buffer.mapping_len);
+            ptr::copy_nonoverlapping(
+                data.as_ptr(),
+                buffer.mapping.cast::<u8>(),
+                buffer.mapping_len,
+            );
         }
         Ok(())
     }
@@ -802,7 +815,9 @@ impl Drop for WaylandTextOverlay {
         }
         let roundtrip = unsafe {
             self._library
-                .get::<unsafe extern "C" fn(*mut Proxy, *mut Queue) -> c_int>(b"wl_display_roundtrip_queue\0")
+                .get::<unsafe extern "C" fn(*mut Proxy, *mut Queue) -> c_int>(
+                    b"wl_display_roundtrip_queue\0",
+                )
         };
         if let Ok(roundtrip) = roundtrip {
             // SAFETY: the parent display is still alive; surface detach is sent
@@ -811,13 +826,7 @@ impl Drop for WaylandTextOverlay {
         }
         unsafe {
             for buffer in &self.buffers {
-                (self.marshal)(
-                    buffer.proxy,
-                    0,
-                    ptr::null(),
-                    1,
-                    WL_MARSHAL_FLAG_DESTROY,
-                );
+                (self.marshal)(buffer.proxy, 0, ptr::null(), 1, WL_MARSHAL_FLAG_DESTROY);
             }
             (self.marshal)(self.subsurface, 0, ptr::null(), 1, WL_MARSHAL_FLAG_DESTROY);
             (self.marshal)(
@@ -827,7 +836,13 @@ impl Drop for WaylandTextOverlay {
                 self.compositor_version,
                 WL_MARSHAL_FLAG_DESTROY,
             );
-            (self.marshal)(self.subcompositor, 0, ptr::null(), 1, WL_MARSHAL_FLAG_DESTROY);
+            (self.marshal)(
+                self.subcompositor,
+                0,
+                ptr::null(),
+                1,
+                WL_MARSHAL_FLAG_DESTROY,
+            );
             if self.compositor_version >= 4 {
                 // wl_compositor.destroy was added in version 4. Older
                 // compositor proxies have no protocol destructor request.
@@ -842,7 +857,13 @@ impl Drop for WaylandTextOverlay {
                 (self.proxy_destroy)(self.compositor);
             }
             // wl_shm.destroy is available from version 1.
-            (self.marshal)(self.shm, 0, ptr::null(), self.shm_version, WL_MARSHAL_FLAG_DESTROY);
+            (self.marshal)(
+                self.shm,
+                0,
+                ptr::null(),
+                self.shm_version,
+                WL_MARSHAL_FLAG_DESTROY,
+            );
         }
         self.buffers.clear();
         let destroy_queue = unsafe {
@@ -859,7 +880,11 @@ impl Drop for WaylandTextOverlay {
 fn interface(library: &Library, name: &'static [u8]) -> Result<*const Interface, String> {
     // SAFETY: these exported data symbols are wl_interface records in the
     // loaded libwayland-client and the library outlives all proxies using them.
-    let symbol = unsafe { library.get::<*const Interface>(name) }
-        .map_err(|error| format!("resolve Wayland interface {}: {error}", String::from_utf8_lossy(name)))?;
+    let symbol = unsafe { library.get::<*const Interface>(name) }.map_err(|error| {
+        format!(
+            "resolve Wayland interface {}: {error}",
+            String::from_utf8_lossy(name)
+        )
+    })?;
     Ok(*symbol)
 }

@@ -157,7 +157,11 @@ impl SurfaceOwner {
         info: roblox_runtime::jni::game_activity::RawTextBoxInfo,
         scale_factor: f64,
     ) {
-        if let Self::Wayland { overlay: Some(overlay), .. } = self {
+        if let Self::Wayland {
+            overlay: Some(overlay),
+            ..
+        } = self
+        {
             if let Err(error) = overlay.update(text, caret, info, scale_factor) {
                 eprintln!("rusty-blox: text overlay update failed: {error}");
             }
@@ -165,7 +169,11 @@ impl SurfaceOwner {
     }
 
     pub(crate) fn hide_text_overlay(&mut self) {
-        if let Self::Wayland { overlay: Some(overlay), .. } = self {
+        if let Self::Wayland {
+            overlay: Some(overlay),
+            ..
+        } = self
+        {
             if let Err(error) = overlay.hide() {
                 eprintln!("rusty-blox: hide text overlay failed: {error}");
             }

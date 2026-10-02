@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use crate::host_window::SurfaceOwner;
+use roblox_detection::opencv::prelude::MatTraitConst;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceEvent, ElementState, Ime, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
@@ -42,6 +43,14 @@ pub(crate) struct ClientApp {
     movement_pressed: Vec<KeyCode>,
     movement_active: [Option<KeyCode>; 2],
     settings: crate::settings::Settings,
+    detection_config: roblox_detection::DetectionConfig,
+    detector: roblox_detection::Detector,
+    detection_enabled: bool,
+    overlay_enabled: bool,
+    triggerbot_enabled: bool,
+    triggerbot_target_active: bool,
+    pressed_key_codes: HashSet<KeyCode>,
+    consumed_detection_hotkeys: HashSet<KeyCode>,
     game_mode: Option<crate::desktop::GameMode>,
     discord_presence: Option<crate::desktop::DiscordPresence>,
     #[cfg(feature = "webview")]
@@ -49,6 +58,112 @@ pub(crate) struct ClientApp {
 }
 
 impl ClientApp {
+    fn toggle_detection_hotkey(&mut self, key: KeyCode) -> bool {
+        match key {
+            KeyCode::F1 => {
+                self.detection_enabled = !self.detection_enabled;
+                if self.detection_enabled {
+                    eprintln!("[detection] enabled");
+                } else {
+                    self.detector.reset();
+                    self.triggerbot_enabled = false;
+                    self.triggerbot_target_active = false;
+                    eprintln!("[detection] disabled");
+                }
+                true
+            }
+            KeyCode::F2 => {
+                self.overlay_enabled = !self.overlay_enabled;
+                eprintln!(
+                    "[detection] overlay {}",
+                    if self.overlay_enabled {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    }
+                );
+                true
+            }
+            KeyCode::F3 => {
+                self.triggerbot_enabled = !self.triggerbot_enabled;
+                self.triggerbot_target_active = false;
+                eprintln!(
+                    "[detection] triggerbot {}",
+                    if self.triggerbot_enabled {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    }
+                );
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Feed a captured BGR frame into the detector. Capture code can call this
+    /// on the event-loop thread; input injection stays on the same thread as
+    /// the existing Winit-to-Roblox input forwarding.
+    pub(crate) fn process_detection_frame(
+        &mut self,
+        frame_bgr: &roblox_detection::opencv::core::Mat,
+        event_loop: &ActiveEventLoop,
+    ) {
+        if !self.detection_enabled || !self.window_focused {
+            self.detector.reset();
+            self.triggerbot_target_active = false;
+            return;
+        }
+
+        let frame_center = (frame_bgr.cols() as f32 / 2.0, frame_bgr.rows() as f32 / 2.0);
+        let detection = match self.detector.detect(frame_bgr, &self.detection_config) {
+            Ok(detection) => detection,
+            Err(error) => {
+                eprintln!("[detection] frame rejected: {error}");
+                None
+            }
+        };
+        self.apply_detection(detection.as_ref(), frame_center, event_loop);
+    }
+
+    fn apply_detection(
+        &mut self,
+        detection: Option<&roblox_detection::Detection>,
+        frame_center: (f32, f32),
+        event_loop: &ActiveEventLoop,
+    ) {
+        let Some(detection) = detection else {
+            self.triggerbot_target_active = false;
+            return;
+        };
+
+        let delta = (
+            detection.adjusted_center.x - frame_center.0,
+            detection.adjusted_center.y - frame_center.1,
+        );
+        if delta.0.abs() >= 0.5 || delta.1.abs() >= 0.5 {
+            let position = if self.cursor_locked {
+                self.cursor
+            } else {
+                (self.cursor.0 + delta.0, self.cursor.1 + delta.1)
+            };
+            self.cursor = position;
+            self.forward_mouse_move(position, delta, event_loop);
+        }
+
+        if self.triggerbot_enabled && !self.triggerbot_target_active {
+            self.forward_mouse_button(self.cursor, true, 0, event_loop);
+            self.forward_mouse_button(self.cursor, false, 0, event_loop);
+            self.triggerbot_target_active = true;
+        } else if !self.triggerbot_enabled {
+            self.triggerbot_target_active = false;
+        }
+    }
+
+    pub(crate) fn overlay_enabled(&self) -> bool {
+        self.overlay_enabled
+    }
+
     fn forward_locked_mouse_move(&self, position: (f32, f32), delta: (f32, f32)) {
         let Some(native) = self.input_natives.mouse_move else {
             return;
@@ -68,6 +183,7 @@ impl ClientApp {
         asset_dir: PathBuf,
         settings: crate::settings::Settings,
         fast_flags_path: PathBuf,
+        detection_config: roblox_detection::DetectionConfig,
     ) -> Self {
         #[cfg(feature = "webview")]
         eprintln!("rusty-blox: embedded WebKitGTK web view host enabled");
@@ -101,6 +217,14 @@ impl ClientApp {
             movement_pressed: Vec::new(),
             movement_active: [None, None],
             settings,
+            detection_config,
+            detector: roblox_detection::Detector::default(),
+            detection_enabled: false,
+            overlay_enabled: false,
+            triggerbot_enabled: false,
+            triggerbot_target_active: false,
+            pressed_key_codes: HashSet::new(),
+            consumed_detection_hotkeys: HashSet::new(),
             game_mode: None,
             discord_presence: None,
             #[cfg(feature = "webview")]
@@ -271,6 +395,9 @@ impl winit::application::ApplicationHandler for ClientApp {
                 self.window_focused = focused;
                 if !focused {
                     self.clear_movement_keys(event_loop);
+                    self.pressed_key_codes.clear();
+                    self.consumed_detection_hotkeys.clear();
+                    self.triggerbot_target_active = false;
                 }
                 if !focused && self.cursor_locked {
                     if let Some(window) = self.window.as_ref() {
@@ -316,6 +443,23 @@ impl winit::application::ApplicationHandler for ClientApp {
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 if let PhysicalKey::Code(code) = event.physical_key {
+                    let was_alone = self.pressed_key_codes.is_empty()
+                        && self.modifiers == ModifiersState::empty();
+                    if event.state == ElementState::Pressed {
+                        self.pressed_key_codes.insert(code);
+                        if self.consumed_detection_hotkeys.contains(&code) {
+                            return;
+                        }
+                        if was_alone && !event.repeat && self.toggle_detection_hotkey(code) {
+                            self.consumed_detection_hotkeys.insert(code);
+                            return;
+                        }
+                    } else {
+                        self.pressed_key_codes.remove(&code);
+                        if self.consumed_detection_hotkeys.remove(&code) {
+                            return;
+                        }
+                    }
                     if event.state == ElementState::Pressed {
                         if self.modifiers.control_key() && self.text_shortcut(code) {
                             return;
