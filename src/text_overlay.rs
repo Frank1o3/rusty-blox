@@ -789,6 +789,9 @@ impl WaylandTextOverlay {
             height,
         )?;
         if let Some(index) = replace {
+            // The compositor has released this buffer, so its client proxy
+            // and mapping can be retired before reusing the slot.
+            unsafe { (self.proxy_destroy)(self.buffers[index].proxy) };
             self.buffers[index] = buffer;
             Ok(Some(index))
         } else {
