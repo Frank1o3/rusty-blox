@@ -11,6 +11,7 @@ mod app;
 mod client;
 mod client_settings;
 mod desktop;
+mod detection;
 mod host_window;
 mod settings;
 mod startup;

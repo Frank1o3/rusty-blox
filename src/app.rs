@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use crate::host_window::SurfaceOwner;
-use roblox_detection::opencv::prelude::MatTraitConst;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceEvent, ElementState, Ime, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
@@ -44,7 +43,7 @@ pub(crate) struct ClientApp {
     movement_active: [Option<KeyCode>; 2],
     settings: crate::settings::Settings,
     detection_config: roblox_detection::DetectionConfig,
-    detector: roblox_detection::Detector,
+    detection_worker: crate::detection::DetectionWorker,
     detection_enabled: bool,
     overlay_enabled: bool,
     triggerbot_enabled: bool,
@@ -65,11 +64,11 @@ impl ClientApp {
                 if self.detection_enabled {
                     eprintln!("[detection] enabled");
                 } else {
-                    self.detector.reset();
                     self.triggerbot_enabled = false;
                     self.triggerbot_target_active = false;
                     eprintln!("[detection] disabled");
                 }
+                self.update_capture_state();
                 true
             }
             KeyCode::F2 => {
@@ -82,6 +81,10 @@ impl ClientApp {
                         "disabled"
                     }
                 );
+                self.update_capture_state();
+                if !self.overlay_enabled {
+                    self.update_detection_overlay(0, 0, None);
+                }
                 true
             }
             KeyCode::F3 => {
@@ -101,29 +104,33 @@ impl ClientApp {
         }
     }
 
-    /// Feed a captured BGR frame into the detector. Capture code can call this
-    /// on the event-loop thread; input injection stays on the same thread as
-    /// the existing Winit-to-Roblox input forwarding.
-    pub(crate) fn process_detection_frame(
-        &mut self,
-        frame_bgr: &roblox_detection::opencv::core::Mat,
-        event_loop: &ActiveEventLoop,
-    ) {
-        if !self.detection_enabled || !self.window_focused {
-            self.detector.reset();
+    fn update_capture_state(&mut self) {
+        let enabled = self.detection_enabled || self.overlay_enabled;
+        roblox_runtime::graphics::set_capture_enabled(enabled);
+        if !enabled {
+            self.detection_worker.reset();
             self.triggerbot_target_active = false;
-            return;
         }
+    }
 
-        let frame_center = (frame_bgr.cols() as f32 / 2.0, frame_bgr.rows() as f32 / 2.0);
-        let detection = match self.detector.detect(frame_bgr, &self.detection_config) {
-            Ok(detection) => detection,
-            Err(error) => {
-                eprintln!("[detection] frame rejected: {error}");
-                None
-            }
+    fn pump_detection(&mut self, event_loop: &ActiveEventLoop) {
+        while let Some(frame) = roblox_runtime::graphics::take_captured_frame() {
+            self.detection_worker.submit(frame);
+        }
+        let Some(result) = self.detection_worker.take_latest() else {
+            return;
         };
-        self.apply_detection(detection.as_ref(), frame_center, event_loop);
+        if self.overlay_enabled && self.window_focused {
+            self.update_detection_overlay(result.width, result.height, result.detection.as_ref());
+        } else {
+            self.update_detection_overlay(0, 0, None);
+        }
+        if self.detection_enabled && self.window_focused {
+            let frame_center = (result.width as f32 / 2.0, result.height as f32 / 2.0);
+            self.apply_detection(result.detection.as_ref(), frame_center, event_loop);
+        } else {
+            self.triggerbot_target_active = false;
+        }
     }
 
     fn apply_detection(
@@ -160,8 +167,21 @@ impl ClientApp {
         }
     }
 
-    pub(crate) fn overlay_enabled(&self) -> bool {
-        self.overlay_enabled
+    fn update_detection_overlay(
+        &mut self,
+        width: u32,
+        height: u32,
+        detection: Option<&roblox_detection::Detection>,
+    ) {
+        if let Some(surface) = self.surface_owner.as_mut() {
+            surface.update_detection_overlay(
+                width,
+                height,
+                self.detection_config.fov,
+                detection.map(|detection| detection.bounds),
+                self.window.as_ref().map_or(1.0, Window::scale_factor),
+            );
+        }
     }
 
     fn forward_locked_mouse_move(&self, position: (f32, f32), delta: (f32, f32)) {
@@ -192,6 +212,7 @@ impl ClientApp {
             .session
             .as_ref()
             .map(|session| session.directory().to_path_buf());
+        let detection_worker = crate::detection::DetectionWorker::new(detection_config.clone());
         Self {
             config: Some(config),
             asset_dir,
@@ -218,7 +239,7 @@ impl ClientApp {
             movement_active: [None, None],
             settings,
             detection_config,
-            detector: roblox_detection::Detector::default(),
+            detection_worker,
             detection_enabled: false,
             overlay_enabled: false,
             triggerbot_enabled: false,
@@ -355,6 +376,7 @@ impl ClientApp {
 
 impl Drop for ClientApp {
     fn drop(&mut self) {
+        roblox_runtime::graphics::set_capture_enabled(false);
         if let Err(error) =
             crate::settings::save_fast_flags(&self.fast_flags_path, &self.fast_flags)
         {
@@ -388,6 +410,7 @@ impl winit::application::ApplicationHandler for ClientApp {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => {
+                roblox_runtime::graphics::set_capture_enabled(false);
                 roblox_runtime::graphics::clear_surface();
                 event_loop.exit();
             }
@@ -398,6 +421,8 @@ impl winit::application::ApplicationHandler for ClientApp {
                     self.pressed_key_codes.clear();
                     self.consumed_detection_hotkeys.clear();
                     self.triggerbot_target_active = false;
+                    self.detection_worker.reset();
+                    self.update_detection_overlay(0, 0, None);
                 }
                 if !focused && self.cursor_locked {
                     if let Some(window) = self.window.as_ref() {
@@ -554,6 +579,7 @@ impl winit::application::ApplicationHandler for ClientApp {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.pump_detection(event_loop);
         #[cfg(feature = "webview")]
         {
             crate::webview::WebViewHost::pump_events();

@@ -637,6 +637,106 @@ impl WaylandTextOverlay {
         self.flush()
     }
 
+    pub(crate) fn update_detection(
+        &mut self,
+        width: u32,
+        height: u32,
+        fov: i32,
+        bounds: Option<roblox_detection::BoundingBox>,
+        scale_factor: f64,
+    ) -> Result<(), String> {
+        self.dispatch_pending()?;
+        let width = width.clamp(1, 4096);
+        let height = height.clamp(1, 4096);
+        let scale = scale_factor.round().clamp(1.0, 4.0) as u32;
+        let Some(slot) = self.buffer_for(width, height)? else {
+            return Ok(());
+        };
+        let buffer = &mut self.buffers[slot];
+        let mut image = ImageSurface::create(Format::ARgb32, width as i32, height as i32)
+            .map_err(|error| format!("create detection overlay image: {error}"))?;
+        let context = Context::new(&image)
+            .map_err(|error| format!("create detection overlay painter: {error}"))?;
+        context.set_operator(Operator::Clear);
+        context
+            .paint()
+            .map_err(|error| format!("clear detection overlay: {error}"))?;
+        context.set_operator(Operator::Over);
+        context.set_line_width(2.0);
+        let fov = (fov.max(1) as f64).min(width as f64).min(height as f64);
+        let left = (width as f64 - fov) / 2.0;
+        let top = (height as f64 - fov) / 2.0;
+        context.set_source_rgba(0.2, 0.9, 0.35, 0.8);
+        context.rectangle(left, top, fov, fov);
+        context
+            .stroke()
+            .map_err(|error| format!("draw detection FOV: {error}"))?;
+        if let Some(bounds) = bounds {
+            context.set_source_rgba(1.0, 0.25, 0.2, 0.95);
+            context.rectangle(
+                bounds.x as f64,
+                bounds.y as f64,
+                bounds.width.max(1) as f64,
+                bounds.height.max(1) as f64,
+            );
+            context
+                .stroke()
+                .map_err(|error| format!("draw detection bounds: {error}"))?;
+        }
+        drop(context);
+        image.flush();
+        let data = image
+            .data()
+            .map_err(|error| format!("access detection overlay pixels: {error}"))?;
+        // SAFETY: the shm mapping and Cairo image have matching ARGB32 layout.
+        unsafe {
+            ptr::copy_nonoverlapping(
+                data.as_ptr(),
+                buffer.mapping.cast::<u8>(),
+                buffer.mapping_len,
+            );
+        }
+
+        unsafe {
+            (self.marshal)(self.subsurface, 1, ptr::null(), 1, 0, 0i32, 0i32);
+            if self.compositor_version >= 3 {
+                (self.marshal)(
+                    self.surface,
+                    8,
+                    ptr::null(),
+                    self.compositor_version,
+                    0,
+                    scale as c_int,
+                );
+            }
+            (self.marshal)(
+                self.surface,
+                1,
+                ptr::null(),
+                self.compositor_version,
+                0,
+                buffer.proxy,
+                0i32,
+                0i32,
+            );
+            (self.marshal)(
+                self.surface,
+                2,
+                ptr::null(),
+                self.compositor_version,
+                0,
+                0i32,
+                0i32,
+                (width / scale).max(1) as c_int,
+                (height / scale).max(1) as c_int,
+            );
+            (self.marshal)(self.surface, 6, ptr::null(), self.compositor_version, 0);
+        }
+        buffer.released.store(false, Ordering::Release);
+        self.hidden = false;
+        self.flush()
+    }
+
     pub(crate) fn hide(&mut self) -> Result<(), String> {
         self.dispatch_pending()?;
         if self.hidden {
@@ -666,9 +766,19 @@ impl WaylandTextOverlay {
         }) {
             return Ok(Some(index));
         }
-        if self.buffers.len() >= MAX_BUFFERS {
-            return Ok(None);
-        }
+        let replace = if self.buffers.len() >= MAX_BUFFERS {
+            let Some((index, _)) = self
+                .buffers
+                .iter()
+                .enumerate()
+                .find(|(_, buffer)| buffer.is_released())
+            else {
+                return Ok(None);
+            };
+            Some(index)
+        } else {
+            None
+        };
         let buffer = ShmBuffer::create(
             self.marshal,
             self.add_listener,
@@ -678,8 +788,13 @@ impl WaylandTextOverlay {
             width,
             height,
         )?;
-        self.buffers.push(buffer);
-        Ok(Some(self.buffers.len() - 1))
+        if let Some(index) = replace {
+            self.buffers[index] = buffer;
+            Ok(Some(index))
+        } else {
+            self.buffers.push(buffer);
+            Ok(Some(self.buffers.len() - 1))
+        }
     }
 
     fn draw_buffer(

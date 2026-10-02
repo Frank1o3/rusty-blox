@@ -11,6 +11,7 @@ pub(crate) enum SurfaceOwner {
     Wayland {
         egl: WaylandEglWindow,
         overlay: Option<crate::text_overlay::WaylandTextOverlay>,
+        detection_overlay: Option<crate::text_overlay::WaylandTextOverlay>,
     },
 }
 
@@ -122,6 +123,16 @@ impl SurfaceOwner {
                         None
                     }
                 };
+                let detection_overlay = match crate::text_overlay::WaylandTextOverlay::create(
+                    display.display.as_ptr(),
+                    window_handle.surface.as_ptr(),
+                ) {
+                    Ok(overlay) => Some(overlay),
+                    Err(error) => {
+                        eprintln!("rusty-blox: detection overlay unavailable: {error}");
+                        None
+                    }
+                };
                 // SAFETY: winit owns the display/surface, while this owner
                 // keeps the derived wl_egl_window alive through engine shutdown.
                 let surface = unsafe {
@@ -135,7 +146,11 @@ impl SurfaceOwner {
                 }
                 .map_err(|error| error.to_string())?;
                 roblox_runtime::graphics::install_surface(surface);
-                Ok(Self::Wayland { egl, overlay })
+                Ok(Self::Wayland {
+                    egl,
+                    overlay,
+                    detection_overlay,
+                })
             }
             (display, window) => Err(format!(
                 "unsupported winit handles: display {display:?}, window {window:?}; expected Xlib or Wayland"
@@ -176,6 +191,30 @@ impl SurfaceOwner {
         {
             if let Err(error) = overlay.hide() {
                 eprintln!("rusty-blox: hide text overlay failed: {error}");
+            }
+        }
+    }
+
+    pub(crate) fn update_detection_overlay(
+        &mut self,
+        width: u32,
+        height: u32,
+        fov: i32,
+        bounds: Option<roblox_detection::BoundingBox>,
+        scale_factor: f64,
+    ) {
+        if let Self::Wayland {
+            detection_overlay: Some(overlay),
+            ..
+        } = self
+        {
+            let result = if width == 0 || height == 0 {
+                overlay.hide()
+            } else {
+                overlay.update_detection(width, height, fov, bounds, scale_factor)
+            };
+            if let Err(error) = result {
+                eprintln!("rusty-blox: detection overlay update failed: {error}");
             }
         }
     }
