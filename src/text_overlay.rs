@@ -712,8 +712,8 @@ impl WaylandTextOverlay {
         let font_size = info.font_size.max(10.0).min(buffer.height as f32) as f64;
         context.set_font_size(font_size);
 
-        // Match Cordial's GTK editor: it masks the three values observed on
-        // Roblox boxes that hide their text (crates/cordial-runtime/src/
+        // Match roblox-runtime's GTK editor: it masks the three values observed on
+        // Roblox boxes that hide their text (crates/roblox-runtime-runtime/src/
         // android/wayland.rs, update_text_overlay).
         let display_text = if matches!(info.text_input_type, 5 | 9 | 10) {
             "•".repeat(text.chars().count())

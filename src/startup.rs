@@ -8,7 +8,7 @@ pub(crate) fn initialize_client(
     size: PhysicalSize<u32>,
 ) -> Result<(), String> {
     // The engine's platform asset folder is the APK's `assets/content`
-    // directory, not the extraction root. Cordial's launcher passes this same
+    // directory, not the extraction root. roblox-runtime's launcher passes this same
     // subdirectory to MainGameActivity and App Bridge.
     let content_dir = asset_dir.join("content");
     if !content_dir.is_dir() {
