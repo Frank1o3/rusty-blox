@@ -49,6 +49,7 @@ pub(crate) struct ClientApp {
     overlay_enabled: bool,
     triggerbot_enabled: bool,
     last_trigger_click: Option<Instant>,
+    trigger_release_at: Option<(Instant, (f32, f32))>,
     pressed_key_codes: HashSet<KeyCode>,
     consumed_detection_hotkeys: HashSet<KeyCode>,
     game_mode: Option<crate::desktop::GameMode>,
@@ -65,7 +66,6 @@ impl ClientApp {
                 if self.detection_enabled {
                     eprintln!("[detection] enabled");
                 } else {
-                    self.triggerbot_enabled = false;
                     eprintln!("[detection] disabled");
                 }
                 self.update_capture_state();
@@ -97,6 +97,7 @@ impl ClientApp {
                         "disabled"
                     }
                 );
+                self.update_capture_state();
                 true
             }
             _ => false,
@@ -104,7 +105,7 @@ impl ClientApp {
     }
 
     fn update_capture_state(&mut self) {
-        let enabled = self.detection_enabled || self.overlay_enabled;
+        let enabled = self.detection_enabled || self.overlay_enabled || self.triggerbot_enabled;
         roblox_runtime::graphics::set_capture_enabled(enabled);
         if !enabled {
             self.detection_worker.reset();
@@ -112,6 +113,12 @@ impl ClientApp {
     }
 
     fn pump_detection(&mut self, event_loop: &ActiveEventLoop) {
+        if let Some((release_at, position)) = self.trigger_release_at {
+            if Instant::now() >= release_at {
+                self.forward_mouse_button(position, false, 0, event_loop);
+                self.trigger_release_at = None;
+            }
+        }
         if let Some(config) = self.detection_worker.take_config_update() {
             if config.triggerbot != self.detection_config.triggerbot {
                 self.triggerbot_enabled = config.triggerbot;
@@ -123,6 +130,7 @@ impl ClientApp {
                         "disabled"
                     }
                 );
+                self.update_capture_state();
             }
             self.detection_config = config;
         }
@@ -137,7 +145,7 @@ impl ClientApp {
         } else {
             self.update_detection_overlay(0, 0, None);
         }
-        if self.detection_enabled && self.window_focused {
+        if (self.detection_enabled || self.triggerbot_enabled) && self.window_focused {
             let frame_center = (result.width as f32 / 2.0, result.height as f32 / 2.0);
             self.apply_detection(result.detection.as_ref(), frame_center, event_loop);
         }
@@ -153,18 +161,22 @@ impl ClientApp {
             return;
         };
 
-        let delta = (
-            detection.adjusted_center.x - frame_center.0,
-            detection.adjusted_center.y - frame_center.1,
-        );
-        if delta.0.abs() >= 0.5 || delta.1.abs() >= 0.5 {
-            let position = if self.cursor_locked {
-                self.cursor
-            } else {
-                (self.cursor.0 + delta.0, self.cursor.1 + delta.1)
-            };
-            self.cursor = position;
-            self.forward_mouse_move(position, delta, event_loop);
+        if self.detection_enabled {
+            let delta = (
+                detection.adjusted_center.x - frame_center.0,
+                detection.adjusted_center.y - frame_center.1,
+            );
+            // The native input accepts float deltas; a half-pixel deadband
+            // left several pixels of target error uncorrected at low gain.
+            if delta.0.abs() >= 0.05 || delta.1.abs() >= 0.05 {
+                let position = if self.cursor_locked {
+                    self.cursor
+                } else {
+                    (self.cursor.0 + delta.0, self.cursor.1 + delta.1)
+                };
+                self.cursor = position;
+                self.forward_mouse_move(position, delta, event_loop);
+            }
         }
 
         let target_dx = detection.center.x - frame_center.0;
@@ -174,10 +186,15 @@ impl ClientApp {
         let click_ready = self.last_trigger_click.is_none_or(|last| {
             last.elapsed() >= Duration::from_millis(self.detection_config.trigger_delay)
         });
-        if self.triggerbot_enabled && within_trigger_distance && click_ready {
+        if self.triggerbot_enabled
+            && within_trigger_distance
+            && click_ready
+            && self.trigger_release_at.is_none()
+        {
             self.forward_mouse_button(self.cursor, true, 0, event_loop);
-            self.forward_mouse_button(self.cursor, false, 0, event_loop);
-            self.last_trigger_click = Some(Instant::now());
+            let now = Instant::now();
+            self.last_trigger_click = Some(now);
+            self.trigger_release_at = Some((now + Duration::from_millis(50), self.cursor));
         }
     }
 
@@ -262,6 +279,7 @@ impl ClientApp {
             overlay_enabled: false,
             triggerbot_enabled: initial_triggerbot,
             last_trigger_click: None,
+            trigger_release_at: None,
             pressed_key_codes: HashSet::new(),
             consumed_detection_hotkeys: HashSet::new(),
             game_mode: None,
@@ -388,6 +406,7 @@ impl ClientApp {
         };
         self.engine = Some(engine);
         self.game_activity = Some(game_activity);
+        self.update_capture_state();
         Ok(())
     }
 }
