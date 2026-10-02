@@ -46,6 +46,7 @@ pub(crate) struct ClientApp {
     detection_config: roblox_detection::DetectionConfig,
     detection_worker: crate::detection::DetectionWorker,
     detection_enabled: bool,
+    right_mouse_pressed: bool,
     overlay_enabled: bool,
     triggerbot_enabled: bool,
     last_trigger_click: Option<Instant>,
@@ -120,6 +121,14 @@ impl ClientApp {
             }
         }
         if let Some(config) = self.detection_worker.take_config_update() {
+            if config.enabled != self.detection_config.enabled {
+                self.detection_enabled = config.enabled;
+                eprintln!(
+                    "[detection] aim {} from detection.json",
+                    if self.detection_enabled { "enabled" } else { "disabled" }
+                );
+                self.update_capture_state();
+            }
             if config.triggerbot != self.detection_config.triggerbot {
                 self.triggerbot_enabled = config.triggerbot;
                 eprintln!(
@@ -161,7 +170,9 @@ impl ClientApp {
             return;
         };
 
-        if self.detection_enabled {
+        let aim_active = self.detection_enabled
+            && (!self.detection_config.aimbot_requires_trigger || self.right_mouse_pressed);
+        if aim_active {
             let delta = (
                 detection.adjusted_center.x - frame_center.0,
                 detection.adjusted_center.y - frame_center.1,
@@ -243,6 +254,7 @@ impl ClientApp {
             .session
             .as_ref()
             .map(|session| session.directory().to_path_buf());
+        let initial_detection_enabled = detection_config.enabled;
         let initial_triggerbot = detection_config.triggerbot;
         let detection_worker = crate::detection::DetectionWorker::new(
             detection_config.clone(),
@@ -275,7 +287,8 @@ impl ClientApp {
             settings,
             detection_config,
             detection_worker,
-            detection_enabled: false,
+            detection_enabled: initial_detection_enabled,
+            right_mouse_pressed: false,
             overlay_enabled: false,
             triggerbot_enabled: initial_triggerbot,
             last_trigger_click: None,
@@ -454,6 +467,7 @@ impl winit::application::ApplicationHandler for ClientApp {
             WindowEvent::Focused(focused) => {
                 self.window_focused = focused;
                 if !focused {
+                    self.right_mouse_pressed = false;
                     self.clear_movement_keys(event_loop);
                     self.pressed_key_codes.clear();
                     self.consumed_detection_hotkeys.clear();
@@ -486,6 +500,9 @@ impl winit::application::ApplicationHandler for ClientApp {
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
+                if button == MouseButton::Right {
+                    self.right_mouse_pressed = state == ElementState::Pressed;
+                }
                 if let Some(button) = android_mouse_button(button) {
                     self.forward_mouse_button(
                         self.cursor,
