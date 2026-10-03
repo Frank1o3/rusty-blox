@@ -45,16 +45,6 @@ compositor controls whether the window floats or tiles.
 Focused Roblox text boxes support Ctrl+A, Ctrl+C, Ctrl+X, and Ctrl+V; the system
 clipboard uses `wl-clipboard`, `xclip`, or `xsel` when available.
 
-The optional color aim assist reads `detection.json` beside the client settings
-(`$XDG_CONFIG_HOME/rusty-blox`, or `~/.config/rusty-blox`). `enabled` sets
-whether aim assist starts on (F1 toggles it), `triggerbot` controls triggerbot
-(F3), and `steady_aim` controls steady aim (F4); each can run independently.
-`aimbot_requires_trigger` optionally requires right mouse for aim assist. Steady
-aim holds `steady_key` (default `left_shift`) while a detected target is within
-`steady_dist`. F2 toggles the overlay; it also appears automatically while any
-feature is enabled, showing feature status, the detected target, and enabled
-steady/trigger radii. The overlay is currently available on Wayland.
-
 Use `rusty-blox --settings` and open the Sessions tab to create a named login
 profile, select it, and click **Set as default session** to use it on later
 launches. The default is “No saved session”. A new profile signs in through
