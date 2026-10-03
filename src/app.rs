@@ -1108,6 +1108,14 @@ fn android_mouse_button(button: MouseButton) -> Option<i32> {
     }
 }
 
+fn movement_axis(code: KeyCode) -> Option<usize> {
+    match code {
+        KeyCode::KeyA | KeyCode::KeyD => Some(0),
+        KeyCode::KeyW | KeyCode::KeyS => Some(1),
+        _ => None,
+    }
+}
+
 fn android_key_code(code: KeyCode) -> Option<i32> {
     Some(match code {
         KeyCode::Digit0 => 7,

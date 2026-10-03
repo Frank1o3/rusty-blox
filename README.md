@@ -46,6 +46,11 @@ compositor controls whether the window floats or tiles.
 Focused Roblox text boxes support Ctrl+A, Ctrl+C, Ctrl+X, and Ctrl+V; the system
 clipboard uses `wl-clipboard`, `xclip`, or `xsel` when available.
 
+Before Roblox starts, the runtime keeps the newest ten Roblox log files and ten
+`memProfStorage*.json` files, then removes empty directories under its data and
+cache roots. It leaves `rbx-storage` directories, content blobs, database files,
+settings, and session data intact.
+
 Use `rusty-blox --settings` and open the Sessions tab to create a named login
 profile, select it, and click **Set as default session** to use it on later
 launches. The default is “No saved session”. A new profile signs in through
