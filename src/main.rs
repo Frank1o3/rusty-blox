@@ -201,7 +201,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("Native libraries: {}", config.native_lib_dir.display());
 
     let event_loop = EventLoop::new()?;
-    let mut app = app::ClientApp::new(config, asset_dir, user_settings, fast_flags_path);
+    let mut app = app::ClientApp::new(config, asset_dir, user_settings);
     event_loop.run_app(&mut app)?;
     if let Some(error) = app.take_failure() {
         return Err(error.into());

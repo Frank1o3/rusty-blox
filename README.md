@@ -35,10 +35,11 @@ ABI-unsafe diagnostic symbol resolver; it is off by default.
 Without `--fast-flags`, the client loads `fast-flags.json` beside its settings
 file (`$XDG_CONFIG_HOME/rusty-blox`, or `~/.config/rusty-blox`). The FastFlags
 tab edits that JSON directly. General and Game frame-cap controls stay linked;
-the selected cap is applied to the loaded FastFlags and XML, and the active
-FastFlags JSON is written back on client exit. The Game tab exposes common Roblox settings as
-checkboxes and sliders backed by `data/files/appData/GlobalBasicSettings_13.xml`,
-without launching Roblox.
+the selected cap is applied to the loaded FastFlags and XML. FastFlags changes
+are saved by the Settings window; the running client does not write its startup
+snapshot back on exit. The Game tab exposes common Roblox settings as checkboxes
+and sliders backed by `data/files/appData/GlobalBasicSettings_13.xml`, without
+launching Roblox.
 The client uses `StartScreenSize` for its initial window size, limited to fit
 the display. On X11 it requests a floating dialog window; on Wayland, the
 compositor controls whether the window floats or tiles.

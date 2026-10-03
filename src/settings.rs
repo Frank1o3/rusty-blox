@@ -224,14 +224,6 @@ pub(crate) fn configured_frame_cap(settings: &Settings) -> Option<u32> {
     settings.fps_limit.or_else(xml_frame_cap)
 }
 
-pub(crate) fn save_fast_flags(
-    path: &std::path::Path,
-    flags: &serde_json::Value,
-) -> Result<(), String> {
-    let contents = serde_json::to_vec_pretty(flags).map_err(|error| error.to_string())?;
-    write_file(path, &contents)
-}
-
 pub(crate) fn run_ui() -> Result<(), String> {
     let app = gtk::Application::builder()
         .application_id("org.rustyblox.Settings")

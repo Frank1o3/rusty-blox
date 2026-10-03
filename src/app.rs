@@ -36,8 +36,6 @@ pub(crate) struct ClientApp {
     text_value: String,
     text_cursor: usize,
     text_selection_anchor: Option<usize>,
-    fast_flags_path: PathBuf,
-    fast_flags: serde_json::Value,
     forwarded_keys: HashSet<i32>,
     movement_pressed: Vec<KeyCode>,
     movement_active: [Option<KeyCode>; 2],
@@ -67,11 +65,9 @@ impl ClientApp {
         config: roblox_runtime::RuntimeConfig,
         asset_dir: PathBuf,
         settings: crate::settings::Settings,
-        fast_flags_path: PathBuf,
     ) -> Self {
         #[cfg(feature = "webview")]
         eprintln!("rusty-blox: embedded WebKitGTK web view host enabled");
-        let fast_flags = config.fast_flags.clone();
         let session_dir = config
             .session
             .as_ref()
@@ -95,8 +91,6 @@ impl ClientApp {
             text_value: String::new(),
             text_cursor: 0,
             text_selection_anchor: None,
-            fast_flags_path,
-            fast_flags,
             forwarded_keys: HashSet::new(),
             movement_pressed: Vec::new(),
             movement_active: [None, None],
@@ -231,11 +225,6 @@ impl ClientApp {
 
 impl Drop for ClientApp {
     fn drop(&mut self) {
-        if let Err(error) =
-            crate::settings::save_fast_flags(&self.fast_flags_path, &self.fast_flags)
-        {
-            eprintln!("rusty-blox: could not save active FastFlags: {error}");
-        }
         if let Some(engine) = &self.engine {
             if let Some(session_dir) = &self.session_dir {
                 if let Err(error) = roblox_runtime::session::save(engine, session_dir) {

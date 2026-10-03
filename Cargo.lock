@@ -1729,6 +1729,7 @@ name = "roblox-graphics-vulkan"
 version = "0.1.2"
 dependencies = [
  "ash",
+ "roblox-logging",
 ]
 
 [[package]]
