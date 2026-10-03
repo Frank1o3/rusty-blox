@@ -20,6 +20,16 @@ const MAX_BUFFERS: usize = 3;
 const WL_MARSHAL_FLAG_DESTROY: u32 = 1;
 const WL_SHM_FORMAT_ARGB8888: c_int = 0;
 
+#[derive(Clone, Copy, Default)]
+pub(crate) struct DetectionOverlayStatus {
+    pub aim_enabled: bool,
+    pub aim_active: bool,
+    pub steady_enabled: bool,
+    pub steady_active: bool,
+    pub triggerbot_enabled: bool,
+    pub triggerbot_active: bool,
+}
+
 fn trace_overlay(stage: &str) {
     if std::env::var_os("RBX_RUNTIME_TEXT_OVERLAY_TRACE").is_some() {
         eprintln!("[text-overlay] {stage}");
@@ -643,6 +653,9 @@ impl WaylandTextOverlay {
         height: u32,
         fov: i32,
         bounds: Option<roblox_detection::BoundingBox>,
+        steady_dist: f64,
+        trigger_dist: f64,
+        status: DetectionOverlayStatus,
         scale_factor: f64,
     ) -> Result<(), String> {
         self.dispatch_pending()?;
@@ -663,6 +676,8 @@ impl WaylandTextOverlay {
             .map_err(|error| format!("clear detection overlay: {error}"))?;
         context.set_operator(Operator::Over);
         context.set_line_width(2.0);
+        let center_x = width as f64 / 2.0;
+        let center_y = height as f64 / 2.0;
         let fov = (fov.max(1) as f64).min(width as f64).min(height as f64);
         let left = (width as f64 - fov) / 2.0;
         let top = (height as f64 - fov) / 2.0;
@@ -671,6 +686,75 @@ impl WaylandTextOverlay {
         context
             .stroke()
             .map_err(|error| format!("draw detection FOV: {error}"))?;
+        if status.steady_enabled {
+            context.set_source_rgba(1.0, 0.65, 0.1, 0.8);
+            context.arc(
+                center_x,
+                center_y,
+                steady_dist.max(1.0).min(width.min(height) as f64 / 2.0),
+                0.0,
+                std::f64::consts::TAU,
+            );
+            context
+                .stroke()
+                .map_err(|error| format!("draw steady aim radius: {error}"))?;
+        }
+        if status.triggerbot_enabled {
+            context.set_source_rgba(0.1, 0.85, 1.0, 0.9);
+            context.arc(
+                center_x,
+                center_y,
+                trigger_dist.max(1.0).min(width.min(height) as f64 / 2.0),
+                0.0,
+                std::f64::consts::TAU,
+            );
+            context
+                .stroke()
+                .map_err(|error| format!("draw triggerbot radius: {error}"))?;
+        }
+        context.select_font_face("Sans", FontSlant::Normal, FontWeight::Bold);
+        context.set_font_size(16.0);
+        let statuses = [
+            (
+                "AIM",
+                status.aim_enabled,
+                status.aim_active,
+                (0.35, 0.9, 0.4),
+            ),
+            (
+                "STEADY",
+                status.steady_enabled,
+                status.steady_active,
+                (1.0, 0.65, 0.1),
+            ),
+            (
+                "TRIGGER",
+                status.triggerbot_enabled,
+                status.triggerbot_active,
+                (0.1, 0.85, 1.0),
+            ),
+        ];
+        let mut status_y = 22.0;
+        for (label, enabled, active, color) in statuses {
+            context.set_source_rgba(
+                if enabled { color.0 } else { 0.75 },
+                if enabled { color.1 } else { 0.75 },
+                if enabled { color.2 } else { 0.75 },
+                0.95,
+            );
+            context.move_to(12.0, status_y);
+            let state = if active {
+                "ACTIVE"
+            } else if enabled {
+                "WAIT"
+            } else {
+                "OFF"
+            };
+            context
+                .show_text(&format!("{label}: {state}"))
+                .map_err(|error| format!("draw detection status: {error}"))?;
+            status_y += 20.0;
+        }
         if let Some(bounds) = bounds {
             context.set_source_rgba(1.0, 0.25, 0.2, 0.95);
             context.rectangle(

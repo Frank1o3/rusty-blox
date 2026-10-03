@@ -47,6 +47,8 @@ pub(crate) struct ClientApp {
     detection_worker: crate::detection::DetectionWorker,
     detection_enabled: bool,
     right_mouse_pressed: bool,
+    steady_aim_enabled: bool,
+    steady_key_down: Option<KeyCode>,
     overlay_enabled: bool,
     triggerbot_enabled: bool,
     last_trigger_click: Option<Instant>,
@@ -60,7 +62,7 @@ pub(crate) struct ClientApp {
 }
 
 impl ClientApp {
-    fn toggle_detection_hotkey(&mut self, key: KeyCode) -> bool {
+    fn toggle_detection_hotkey(&mut self, key: KeyCode, event_loop: &ActiveEventLoop) -> bool {
         match key {
             KeyCode::F1 => {
                 self.detection_enabled = !self.detection_enabled;
@@ -83,7 +85,11 @@ impl ClientApp {
                     }
                 );
                 self.update_capture_state();
-                if !self.overlay_enabled {
+                if !self.overlay_enabled
+                    && !self.detection_enabled
+                    && !self.steady_aim_enabled
+                    && !self.triggerbot_enabled
+                {
                     self.update_detection_overlay(0, 0, None);
                 }
                 true
@@ -101,12 +107,31 @@ impl ClientApp {
                 self.update_capture_state();
                 true
             }
+            KeyCode::F4 => {
+                self.steady_aim_enabled = !self.steady_aim_enabled;
+                if !self.steady_aim_enabled {
+                    self.release_steady_key(event_loop);
+                }
+                eprintln!(
+                    "[detection] steady aim {}",
+                    if self.steady_aim_enabled {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    }
+                );
+                self.update_capture_state();
+                true
+            }
             _ => false,
         }
     }
 
     fn update_capture_state(&mut self) {
-        let enabled = self.detection_enabled || self.overlay_enabled || self.triggerbot_enabled;
+        let enabled = self.detection_enabled
+            || self.steady_aim_enabled
+            || self.overlay_enabled
+            || self.triggerbot_enabled;
         roblox_runtime::graphics::set_capture_enabled(enabled);
         if !enabled {
             self.detection_worker.reset();
@@ -125,7 +150,11 @@ impl ClientApp {
                 self.detection_enabled = config.enabled;
                 eprintln!(
                     "[detection] aim {} from detection.json",
-                    if self.detection_enabled { "enabled" } else { "disabled" }
+                    if self.detection_enabled {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    }
                 );
                 self.update_capture_state();
             }
@@ -141,6 +170,24 @@ impl ClientApp {
                 );
                 self.update_capture_state();
             }
+            if config.steady_aim != self.detection_config.steady_aim {
+                self.steady_aim_enabled = config.steady_aim;
+                if !self.steady_aim_enabled {
+                    self.release_steady_key(event_loop);
+                }
+                eprintln!(
+                    "[detection] steady aim {} from detection.json",
+                    if self.steady_aim_enabled {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    }
+                );
+                self.update_capture_state();
+            }
+            if config.steady_key != self.detection_config.steady_key {
+                self.release_steady_key(event_loop);
+            }
             self.detection_config = config;
         }
         while let Some(frame) = roblox_runtime::graphics::take_captured_frame() {
@@ -149,12 +196,18 @@ impl ClientApp {
         let Some(result) = self.detection_worker.take_latest() else {
             return;
         };
-        if self.overlay_enabled && self.window_focused {
+        let show_overlay = self.overlay_enabled
+            || self.detection_enabled
+            || self.steady_aim_enabled
+            || self.triggerbot_enabled;
+        if show_overlay && self.window_focused {
             self.update_detection_overlay(result.width, result.height, result.detection.as_ref());
         } else {
             self.update_detection_overlay(0, 0, None);
         }
-        if (self.detection_enabled || self.triggerbot_enabled) && self.window_focused {
+        if (self.detection_enabled || self.steady_aim_enabled || self.triggerbot_enabled)
+            && self.window_focused
+        {
             let frame_center = (result.width as f32 / 2.0, result.height as f32 / 2.0);
             self.apply_detection(result.detection.as_ref(), frame_center, event_loop);
         }
@@ -167,6 +220,7 @@ impl ClientApp {
         event_loop: &ActiveEventLoop,
     ) {
         let Some(detection) = detection else {
+            self.update_steady_key(false, event_loop);
             return;
         };
 
@@ -192,6 +246,9 @@ impl ClientApp {
 
         let target_dx = detection.center.x - frame_center.0;
         let target_dy = detection.center.y - frame_center.1;
+        let steady_in_range = target_dx * target_dx + target_dy * target_dy
+            <= (self.detection_config.steady_dist as f32).powi(2);
+        self.update_steady_key(self.steady_aim_enabled && steady_in_range, event_loop);
         let within_trigger_distance = target_dx * target_dx + target_dy * target_dy
             <= (self.detection_config.trigger_dist as f32).powi(2);
         let click_ready = self.last_trigger_click.is_none_or(|last| {
@@ -216,12 +273,63 @@ impl ClientApp {
         detection: Option<&roblox_detection::Detection>,
     ) {
         if let Some(surface) = self.surface_owner.as_mut() {
+            let aim_active = self.detection_enabled
+                && (!self.detection_config.aimbot_requires_trigger || self.right_mouse_pressed);
+            let steady_active = self.steady_key_down.is_some()
+                || steady_key_code(&self.detection_config.steady_key)
+                    .is_some_and(|key| self.pressed_key_codes.contains(&key));
+            let triggerbot_active = self.trigger_release_at.is_some();
             surface.update_detection_overlay(
                 width,
                 height,
                 self.detection_config.fov,
                 detection.map(|detection| detection.bounds),
+                self.detection_config.steady_dist,
+                self.detection_config.trigger_dist,
+                crate::text_overlay::DetectionOverlayStatus {
+                    aim_enabled: self.detection_enabled,
+                    aim_active,
+                    steady_enabled: self.steady_aim_enabled,
+                    steady_active,
+                    triggerbot_enabled: self.triggerbot_enabled,
+                    triggerbot_active,
+                },
                 self.window.as_ref().map_or(1.0, Window::scale_factor),
+            );
+        }
+    }
+
+    fn update_steady_key(&mut self, should_hold: bool, event_loop: &ActiveEventLoop) {
+        let configured_key = should_hold
+            .then(|| steady_key_code(&self.detection_config.steady_key))
+            .flatten()
+            .filter(|key| !self.pressed_key_codes.contains(key));
+        if self.steady_key_down == configured_key {
+            return;
+        }
+        if let Some(previous) = self.steady_key_down.take() {
+            self.send_steady_key(previous, false, event_loop);
+        }
+        if let Some(next) = configured_key {
+            self.send_steady_key(next, true, event_loop);
+            self.steady_key_down = Some(next);
+        }
+    }
+
+    fn release_steady_key(&mut self, event_loop: &ActiveEventLoop) {
+        self.update_steady_key(false, event_loop);
+    }
+
+    fn send_steady_key(&mut self, key: KeyCode, down: bool, event_loop: &ActiveEventLoop) {
+        if let (Some(key_code), Some(evdev_code)) = (android_key_code(key), evdev_key_code(key)) {
+            self.forward_key(
+                down,
+                key_code,
+                evdev_code,
+                0,
+                self.modifiers,
+                false,
+                event_loop,
             );
         }
     }
@@ -255,6 +363,7 @@ impl ClientApp {
             .as_ref()
             .map(|session| session.directory().to_path_buf());
         let initial_detection_enabled = detection_config.enabled;
+        let initial_steady_aim_enabled = detection_config.steady_aim;
         let initial_triggerbot = detection_config.triggerbot;
         let detection_worker = crate::detection::DetectionWorker::new(
             detection_config.clone(),
@@ -289,6 +398,8 @@ impl ClientApp {
             detection_worker,
             detection_enabled: initial_detection_enabled,
             right_mouse_pressed: false,
+            steady_aim_enabled: initial_steady_aim_enabled,
+            steady_key_down: None,
             overlay_enabled: false,
             triggerbot_enabled: initial_triggerbot,
             last_trigger_click: None,
@@ -460,6 +571,7 @@ impl winit::application::ApplicationHandler for ClientApp {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => {
+                self.release_steady_key(event_loop);
                 roblox_runtime::graphics::set_capture_enabled(false);
                 roblox_runtime::graphics::clear_surface();
                 event_loop.exit();
@@ -468,6 +580,7 @@ impl winit::application::ApplicationHandler for ClientApp {
                 self.window_focused = focused;
                 if !focused {
                     self.right_mouse_pressed = false;
+                    self.release_steady_key(event_loop);
                     self.clear_movement_keys(event_loop);
                     self.pressed_key_codes.clear();
                     self.consumed_detection_hotkeys.clear();
@@ -528,7 +641,10 @@ impl winit::application::ApplicationHandler for ClientApp {
                         if self.consumed_detection_hotkeys.contains(&code) {
                             return;
                         }
-                        if was_alone && !event.repeat && self.toggle_detection_hotkey(code) {
+                        if was_alone
+                            && !event.repeat
+                            && self.toggle_detection_hotkey(code, event_loop)
+                        {
                             self.consumed_detection_hotkeys.insert(code);
                             return;
                         }
@@ -1338,6 +1454,25 @@ fn android_mouse_button(button: MouseButton) -> Option<i32> {
         MouseButton::Left => Some(0),
         MouseButton::Right => Some(1),
         MouseButton::Middle => Some(2),
+        _ => None,
+    }
+}
+
+fn steady_key_code(key: &str) -> Option<KeyCode> {
+    match key
+        .trim()
+        .to_ascii_lowercase()
+        .replace('-', "_")
+        .replace(' ', "_")
+        .as_str()
+    {
+        "left_shift" | "lshift" | "shift" => Some(KeyCode::ShiftLeft),
+        "right_shift" | "rshift" => Some(KeyCode::ShiftRight),
+        "left_ctrl" | "lctrl" | "ctrl" | "control" => Some(KeyCode::ControlLeft),
+        "right_ctrl" | "rctrl" => Some(KeyCode::ControlRight),
+        "left_alt" | "lalt" | "alt" => Some(KeyCode::AltLeft),
+        "right_alt" | "ralt" => Some(KeyCode::AltRight),
+        "space" | "spacebar" => Some(KeyCode::Space),
         _ => None,
     }
 }

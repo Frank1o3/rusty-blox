@@ -201,6 +201,9 @@ impl SurfaceOwner {
         height: u32,
         fov: i32,
         bounds: Option<roblox_detection::BoundingBox>,
+        steady_dist: f64,
+        trigger_dist: f64,
+        status: crate::text_overlay::DetectionOverlayStatus,
         scale_factor: f64,
     ) {
         if let Self::Wayland {
@@ -211,7 +214,16 @@ impl SurfaceOwner {
             let result = if width == 0 || height == 0 {
                 overlay.hide()
             } else {
-                overlay.update_detection(width, height, fov, bounds, scale_factor)
+                overlay.update_detection(
+                    width,
+                    height,
+                    fov,
+                    bounds,
+                    steady_dist,
+                    trigger_dist,
+                    status,
+                    scale_factor,
+                )
             };
             if let Err(error) = result {
                 eprintln!("rusty-blox: detection overlay update failed: {error}");
