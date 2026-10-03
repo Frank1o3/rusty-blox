@@ -1,16 +1,15 @@
 [package]
     edition="2024"
     name="rusty-blox"
-    version="0.1.0"
+version="0.1.0"
 
 [features]
-    default=["webview"]
-    # The embedded WebKitGTK 6 window is part of the normal runtime.
-    # This needs the WebKitGTK and JavaScriptCore development packages from the host.
-    webview=["dep:webkit6", "gtk4/v4_10"]
+default=["webview"]
+# Kept as a no-op alias for existing build commands. WebView is always built.
+webview=[]
 
 [dependencies]
-    gtk4="0.11.5"
+    gtk4={version="0.11.5", features=["v4_10"]}
     libc="0.2"
     libloading="0.9.0"
     quick-xml="0.41.0"
@@ -21,7 +20,7 @@ roblox-runtime={path="../roblox-runtime"}
     ureq="3.3.0"
     wayland-backend={version="0.3.17", features=["client_system"]}
     wayland-client="0.31.15"
-    webkit6={version="0.6", optional=true}
+    webkit6="0.6"
     winit="0.30.13"
     zbus={version="5.18.0", features=["blocking"]}
     zip={version="8.6.0", default-features=false, features=["deflate"]}

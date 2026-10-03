@@ -15,7 +15,6 @@ mod host_window;
 mod settings;
 mod startup;
 mod text_overlay;
-#[cfg(feature = "webview")]
 mod webview;
 
 use std::path::PathBuf;
