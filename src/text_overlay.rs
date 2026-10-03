@@ -120,7 +120,6 @@ unsafe extern "C" fn registry_global(
             name,
             interface_c.as_ptr(),
             bind_version,
-            ptr::null_mut::<*mut Proxy>(),
         )
     };
     if proxy.is_null() {
@@ -220,7 +219,6 @@ impl ShmBuffer {
                 interfaces.shm_pool,
                 shm_version,
                 0,
-                ptr::null_mut::<*mut Proxy>(),
                 file.as_raw_fd(),
                 size_i32,
             )
@@ -241,7 +239,6 @@ impl ShmBuffer {
                 interfaces.buffer,
                 1,
                 0,
-                ptr::null_mut::<*mut Proxy>(),
                 0i32,
                 width_i32,
                 height_i32,
@@ -414,16 +411,7 @@ impl WaylandTextOverlay {
         // `wl_display_get_registry` is an inline generated wrapper in
         // wayland-client-protocol.h, not an exported libwayland symbol. Its
         // protocol request is wl_display opcode 1 with a wl_registry result.
-        let registry = unsafe {
-            marshal(
-                display,
-                1,
-                interfaces.registry,
-                1,
-                0,
-                ptr::null_mut::<*mut Proxy>(),
-            )
-        };
+        let registry = unsafe { marshal(display, 1, interfaces.registry, 1, 0) };
         if registry.is_null() {
             return Err("wl_display_get_registry returned null".to_owned());
         }
@@ -485,7 +473,6 @@ impl WaylandTextOverlay {
                 context.interfaces.surface,
                 compositor_version,
                 0,
-                ptr::null_mut::<*mut Proxy>(),
             )
         };
         if surface.is_null() {
@@ -498,7 +485,6 @@ impl WaylandTextOverlay {
                 context.interfaces.subsurface,
                 1,
                 0,
-                ptr::null_mut::<*mut Proxy>(),
                 surface,
                 parent,
             )
@@ -520,7 +506,6 @@ impl WaylandTextOverlay {
                 context.interfaces.region,
                 compositor_version,
                 0,
-                ptr::null_mut::<*mut Proxy>(),
             )
         };
         if !region.is_null() {
