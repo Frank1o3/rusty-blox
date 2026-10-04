@@ -18,7 +18,12 @@ pub(crate) fn load(explicit: Option<&Path>, cache_dir: &Path) -> Result<String, 
     }
 
     let fetched = (|| -> Result<String, String> {
-        let response = ureq::get(URL)
+        let config = ureq::config::Config::builder()
+            .timeout_global(Some(Duration::from_secs(10)))
+            .build();
+        let client = config.new_agent();
+        let response = client
+            .get(URL)
             .call()
             .map_err(|error| format!("GET {URL}: {error}"))?;
         let bytes = response

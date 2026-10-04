@@ -151,7 +151,7 @@ fn read_frame(stream: &mut UnixStream) -> std::io::Result<(u32, Value)> {
     let mut header = [0; 8];
     stream.read_exact(&mut header)?;
     let size = u32::from_le_bytes(header[4..8].try_into().unwrap()) as usize;
-    if size > 1024 * 1024 {
+    if size > 64 * 1024 {
         return Err(std::io::Error::other("oversized Discord IPC frame"));
     }
     let mut bytes = vec![0; size];

@@ -437,8 +437,11 @@ impl winit::application::ApplicationHandler for ClientApp {
                 }
             }
         }
+        let poll_interval_ms = crate::settings::configured_frame_cap(&self.settings)
+            .map(|cap| if cap == 0 { 4 } else { (1000 / cap).clamp(2, 16) as u64 })
+            .unwrap_or(16);
         event_loop.set_control_flow(ControlFlow::WaitUntil(
-            std::time::Instant::now() + std::time::Duration::from_millis(16),
+            std::time::Instant::now() + std::time::Duration::from_millis(poll_interval_ms),
         ));
     }
 
@@ -1284,4 +1287,60 @@ fn evdev_key_code(code: KeyCode) -> Option<i32> {
 
 fn is_evdev_text_key(code: i32) -> bool {
     matches!(code, 2..=13 | 16..=27 | 30..=41 | 44..=55 | 57 | 71..=83 | 98 | 117 | 121)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_movement_axes() {
+        assert_eq!(movement_axis(KeyCode::KeyA), Some(0));
+        assert_eq!(movement_axis(KeyCode::KeyD), Some(0));
+        assert_eq!(movement_axis(KeyCode::KeyW), Some(1));
+        assert_eq!(movement_axis(KeyCode::KeyS), Some(1));
+        assert_eq!(movement_axis(KeyCode::Space), None);
+    }
+
+    #[test]
+    fn test_mouse_buttons() {
+        assert_eq!(android_mouse_button(MouseButton::Left), Some(0));
+        assert_eq!(android_mouse_button(MouseButton::Right), Some(1));
+        assert_eq!(android_mouse_button(MouseButton::Middle), Some(2));
+        assert_eq!(android_mouse_button(MouseButton::Back), None);
+    }
+
+    #[test]
+    fn test_key_mappings_consistency() {
+        let keys = [
+            KeyCode::KeyW,
+            KeyCode::KeyA,
+            KeyCode::KeyS,
+            KeyCode::KeyD,
+            KeyCode::Space,
+            KeyCode::Enter,
+            KeyCode::Escape,
+            KeyCode::Backspace,
+            KeyCode::Tab,
+        ];
+        for key in keys {
+            assert!(
+                android_key_code(key).is_some(),
+                "Expected android_key_code for {key:?}"
+            );
+            assert!(
+                evdev_key_code(key).is_some(),
+                "Expected evdev_key_code for {key:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_evdev_text_keys() {
+        assert!(is_evdev_text_key(2)); // Key 1
+        assert!(is_evdev_text_key(17)); // Key W
+        assert!(is_evdev_text_key(57)); // Space
+        assert!(!is_evdev_text_key(1)); // Escape
+        assert!(!is_evdev_text_key(59)); // F1
+    }
 }

@@ -307,6 +307,20 @@ fn install_popup_handling(
     });
 }
 
+fn is_allowed_host(host: &str) -> bool {
+    let host = host.to_ascii_lowercase();
+    let allowed_suffixes = [
+        "roblox.com",
+        "rbxcdn.com",
+        "arkoselabs.com",
+        "funcaptcha.com",
+        "recaptcha.net",
+    ];
+    allowed_suffixes
+        .iter()
+        .any(|&suffix| host == suffix || host.ends_with(&format!(".{suffix}")))
+}
+
 fn webview_uri_allowed(uri: &str) -> bool {
     let Ok(parsed) = gtk4::glib::Uri::parse(uri, gtk4::glib::UriFlags::NONE) else {
         return false;
@@ -323,9 +337,41 @@ fn webview_uri_allowed(uri: &str) -> bool {
             && matches!(parsed.path().as_str(), "blank" | "srcdoc");
     }
     scheme.eq_ignore_ascii_case("https")
-        && parsed.host().is_some_and(|host| !host.is_empty())
+        && parsed.host().is_some_and(|host| is_allowed_host(&host))
         && parsed.userinfo().is_none()
         && (parsed.port() == -1 || parsed.port() == 443)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_webview_uri_allowed() {
+        assert!(webview_uri_allowed("https://www.roblox.com/login"));
+        assert!(webview_uri_allowed("https://auth.roblox.com/v1/login"));
+        assert!(webview_uri_allowed("https://roblox.com"));
+        assert!(webview_uri_allowed("https://client-telemetry.roblox.com"));
+        assert!(webview_uri_allowed("https://t6.rbxcdn.com/test"));
+        assert!(webview_uri_allowed("https://client-api.arkoselabs.com/fc/api"));
+        assert!(webview_uri_allowed("about:blank"));
+        assert!(webview_uri_allowed("about:srcdoc"));
+
+        // Disallowed schemes
+        assert!(!webview_uri_allowed("http://www.roblox.com"));
+        assert!(!webview_uri_allowed("file:///etc/passwd"));
+        assert!(!webview_uri_allowed("javascript:alert(1)"));
+        assert!(!webview_uri_allowed("about:config"));
+
+        // Disallowed hosts
+        assert!(!webview_uri_allowed("https://evil.com"));
+        assert!(!webview_uri_allowed("https://not-roblox.com"));
+        assert!(!webview_uri_allowed("https://roblox.com.attacker.com"));
+
+        // Disallowed credentials or custom ports
+        assert!(!webview_uri_allowed("https://user:pass@www.roblox.com"));
+        assert!(!webview_uri_allowed("https://www.roblox.com:8080"));
+    }
 }
 
 fn read_roblox_session_cookie(session_dir: &Path) -> Option<String> {
@@ -334,7 +380,7 @@ fn read_roblox_session_cookie(session_dir: &Path) -> Option<String> {
         let Some((_, encoded_cookies)) = line.split_once('\t') else {
             continue;
         };
-        let cookies = unescape_cookie_line(encoded_cookies);
+        let cookies = roblox_runtime::session::unescape_cookies(encoded_cookies);
         for cookie in cookies.split("; ") {
             let Some((name, value)) = cookie.split_once('=') else {
                 continue;
@@ -345,26 +391,4 @@ fn read_roblox_session_cookie(session_dir: &Path) -> Option<String> {
         }
     }
     None
-}
-
-fn unescape_cookie_line(value: &str) -> String {
-    let mut output = String::with_capacity(value.len());
-    let mut chars = value.chars();
-    while let Some(ch) = chars.next() {
-        if ch != '\\' {
-            output.push(ch);
-            continue;
-        }
-        match chars.next() {
-            Some('t') => output.push('\t'),
-            Some('n') => output.push('\n'),
-            Some('r') => output.push('\r'),
-            Some(ch) => {
-                output.push('\\');
-                output.push(ch);
-            }
-            None => output.push('\\'),
-        }
-    }
-    output
 }
