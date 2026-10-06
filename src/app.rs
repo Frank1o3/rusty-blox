@@ -32,6 +32,7 @@ pub(crate) struct ClientApp {
     cursor_locked: bool,
     window_focused: bool,
     cursor_inside: bool,
+    textbox_focused: bool,
     text_generation: Option<u32>,
     text_value: String,
     text_cursor: usize,
@@ -85,6 +86,7 @@ impl ClientApp {
             cursor_locked: false,
             window_focused: false,
             cursor_inside: false,
+            textbox_focused: false,
             text_generation: None,
             text_value: String::new(),
             text_cursor: 0,
@@ -436,6 +438,7 @@ impl winit::application::ApplicationHandler for ClientApp {
                     roblox_runtime::session::flush_if_due(engine, session_dir);
                 }
             }
+            roblox_runtime::gc_if_due();
         }
         let poll_interval_ms = crate::settings::configured_frame_cap(&self.settings)
             .map(|cap| if cap == 0 { 4 } else { (1000 / cap).clamp(2, 16) as u64 })
@@ -470,7 +473,7 @@ impl ClientApp {
         let Some(owner) = self.surface_owner.as_mut() else {
             return;
         };
-        if roblox_runtime::jni::game_activity::focused_textbox().is_none() {
+        if !self.textbox_focused {
             owner.hide_text_overlay();
             return;
         }
@@ -488,7 +491,9 @@ impl ClientApp {
             return;
         }
         self.text_generation = Some(generation);
-        if roblox_runtime::jni::game_activity::focused_textbox().is_some() {
+        let is_focused = roblox_runtime::jni::game_activity::focused_textbox().is_some();
+        self.textbox_focused = is_focused;
+        if is_focused {
             self.text_value = roblox_runtime::jni::game_activity::textbox_text();
             let state_generation = roblox_runtime::jni::game_activity::ime_state_generation();
             let selection = if state_generation != 0 {
