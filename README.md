@@ -70,6 +70,43 @@ shows all launcher/runtime diagnostics, including key presses. The WASD option
 lets the most recently pressed key win when opposite directions are held; when
 it is released, a still-held opposite key resumes immediately.
 
+## Mini FastFlags list for low end devices
+```json
+{
+  "FFlagDebugGraphicsPreferVulkan": true,
+  "DFFlagDebugRenderForceTechnologyVoxel": true,
+  "DFFlagDebugPauseVoxelizer": false,
+  "DFIntCSGLevelOfDetailSwitchingDistance": 50,
+  "DFIntCSGLevelOfDetailSwitchingDistanceL12": 75,
+  "DFIntCSGLevelOfDetailSwitchingDistanceL23": 100,
+  "DFIntCSGLevelOfDetailSwitchingDistanceL34": 150,
+  "DFIntDebugFRMQualityLevelOverride": 1,
+  "DFIntTaskSchedulerTargetFps": 120,
+  "FFlagDisablePostFx": true,
+  "FIntDebugForceMSAASamples": 0,
+  "FIntFRMMaxGrassDistance": 0,
+  "FIntFRMMinGrassDistance": 0,
+  "FIntRenderGrassDetailStrands": 0,
+  "FIntRenderGrassHeightScaler": 0,
+  "FIntRenderLocalLightFadeInMs": 0,
+  "FIntRenderLocalLightUpdatesMax": 1,
+  "FIntRenderLocalLightUpdatesMin": 1,
+  "FIntRenderShadowIntensity": 0,
+  "DFFlagUseVisBugChecks": true,
+  "DFFlagRenderBeamOcclusionCulling": true,
+  "DFFlagRenderEmitterOcclusionCulling": true,
+  "DFFlagRenderFastClusterOcclusionCulling4": true,
+  "FFlagLightOcclusionCull5": true,
+  "FFlagRenderEnableGlobalInstancingGPUWhitelistAndroid": true,
+  "DFIntPerformanceControlTextureQualityBestUtility": -1,
+  "FFlagAutomaticDRS4": true,
+  "FFlagAutomaticDRSUseGpuTime2": true,
+  "FFlagAutomaticDRSEnableLowDPI": true,
+  "FFlagRenderDynamicResolutionScale12": true,
+  "FFlagNewLightAttenuation3": true
+}
+```
+
 For development, `USE_EXPERIMENTAL_JNIVM=1` or `true` overrides the saved JNI
 backend choice and enables Rust JNI for that launch. `./dev.sh` uses that
 override, runs with `--host-libc`, and replaces `rusty-blox.log` with the
