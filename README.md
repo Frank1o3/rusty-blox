@@ -4,6 +4,11 @@
 It owns APK discovery/import, managed files, host window creation and desktop
 input forwarding.
 
+Run `rusty-blox` with no arguments (or `cargo run --release`) to open the
+launcher. The Home screen can download or update Roblox; **Play Roblox** saves
+the current options and starts the client. Settings, sessions, and FastFlags
+are available in the launcher, so normal startup does not require CLI flags.
+
 `roblox-runtime` owns Android compatibility, game startup, Android input
 translation and graphics backend selection. The client supplies the runtime
 with the APK/native-library locations, data and cache paths, configuration and
@@ -35,8 +40,8 @@ playable game appears.
 Pass a base APK as the positional argument, use Sober's installed build, or run
 `--update-apk`. Use `--import-sober` to refresh an existing managed build from
 Sober. The client also accepts `--fast-flags FILE` and `--client-settings FILE`
-and passes those inputs in `RuntimeConfig`. `--host-libc` opts into the runtime's
-ABI-unsafe diagnostic symbol resolver; it is off by default.
+and passes those inputs in `RuntimeConfig`. The General tab's host-libc checkbox
+opts into the ABI-unsafe diagnostic symbol resolver; it is off by default.
 
 Without `--fast-flags`, the client loads `fast-flags.json` beside its settings
 file (`$XDG_CONFIG_HOME/rusty-blox`, or `~/.config/rusty-blox`). The FastFlags
@@ -57,10 +62,11 @@ Before Roblox starts, the runtime keeps the newest ten Roblox log files and ten
 cache roots. It leaves `rbx-storage` directories, content blobs, database files,
 settings, and session data intact.
 
-Use `rusty-blox --settings` and open the Sessions tab to create a named login
-profile, select it, and click **Set as default session** to use it on later
-launches. The default is “No saved session”. A new profile signs in through
-Roblox on its first launch and saves its cookies when the client exits.
+Open the launcher and use the Sessions tab to create a named login profile.
+Select it and use **Save & Play** to save it as the default for later launches.
+The default is “No saved session”. A new profile signs in through Roblox on
+its first launch and saves its cookies when the client exits. `--settings` is
+still available to open the same launcher explicitly.
 `--session NAME` overrides the selected profile for one launch. Only one
 Roblox process can run at a time because the engine and JNI state are
 process-global.
@@ -70,9 +76,9 @@ libjnivm is the default. If Rust JNI is selected, the checkbox controls whether
 unhandled methods and fields can fall back to C++ libjnivm; fallback is enabled
 by default. The OpenGL ES swap interval can be set to off (0), on (1), or
 adaptive (-1, if the host driver supports it). These settings apply on the next
-launch. The same tab selects a shared log level: level 1 shows standard startup
-steps, level 2 adds runtime logs, level 3 adds JNI VM logs, and level 4
-shows all launcher/runtime diagnostics, including key presses. The WASD option
+launch. The General tab also has independent log category checkboxes for base,
+runtime, JNI/JNI VM, linker, stubs, input, WebView, and session messages. Base
+and runtime messages are enabled by default. The WASD option
 lets the most recently pressed key win when opposite directions are held; when
 it is released, a still-held opposite key resumes immediately.
 
@@ -115,5 +121,6 @@ it is released, a still-held opposite key resumes immediately.
 
 For development, `USE_EXPERIMENTAL_JNIVM=1` or `true` overrides the saved JNI
 backend choice and enables Rust JNI for that launch. `./dev.sh` uses that
-override, runs with `--host-libc`, and replaces `rusty-blox.log` with the
-combined output while also showing it in the terminal.
+override and replaces `rusty-blox.log` with the combined output while also
+showing it in the terminal. Enable host-libc in Settings to use the ABI-unsafe
+diagnostic resolver for that run.

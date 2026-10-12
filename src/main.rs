@@ -29,11 +29,11 @@ fn main() {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let open_launcher_by_default = std::env::args_os().len() == 1;
     let mut args = std::env::args_os().skip(1);
     let mut apk_arg = None;
     let mut fast_flags_path = None;
     let mut client_settings = None;
-    let mut host_libc = false;
     let mut settings_mode = false;
     let mut update_apk = false;
     let mut import_sober = false;
@@ -42,16 +42,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         match arg.to_str() {
             Some("--help" | "-h") => {
                 println!(
-                    "Usage: rusty-blox [--settings] [--update-apk|--import-sober] [--session NAME|--add-session NAME] [--host-libc] [--fast-flags FILE] [--client-settings FILE] [APK]\n\
+                    "Usage: rusty-blox [--settings] [--update-apk|--import-sober] [--session NAME|--add-session NAME] [--fast-flags FILE] [--client-settings FILE] [APK]\n\
+                     With no arguments, opens the launcher. Choose Play to save settings and start Roblox.\n\
                      --update-apk downloads and installs the latest Roblox Android x86-64 APK.\n\
                      --import-sober refreshes the managed APK from Sober's installed build.\n\
                      Without APK, the client uses its managed installation or imports Sober's x86-64 installation.\n\
                      Without --session, Roblox starts without a saved login. --add-session NAME creates/selects a named login profile.\n\
-                     --host-libc enables the runtime's ABI-unsafe diagnostic resolver."
+                     Host libc resolution is an ABI-unsafe diagnostic option in --settings."
                 );
                 return Ok(());
             }
-            Some("--host-libc") => host_libc = true,
             Some("--settings") => settings_mode = true,
             Some("--update-apk" | "--download-apk") => update_apk = true,
             Some("--import-sober") => import_sober = true,
@@ -86,8 +86,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if import_sober && apk_arg.is_some() {
         return Err("--import-sober cannot be combined with an APK path".into());
     }
+    if open_launcher_by_default {
+        settings_mode = true;
+    }
     if settings_mode {
-        return settings::run_ui().map_err(Into::into);
+        if !settings::run_ui().map_err(std::io::Error::other)? {
+            return Ok(());
+        }
     }
     let lock_root = client::managed_install_dir().ok_or("HOME and XDG_DATA_HOME are unset")?;
     std::fs::create_dir_all(&lock_root)?;
@@ -103,9 +108,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     let user_settings = settings::load();
-    let log_level = user_settings.log_level.clamp(1, 4);
     unsafe {
-        std::env::set_var("RUSTY_BLOX_LOG_LEVEL", log_level.to_string());
+        std::env::set_var(
+            "RUSTY_BLOX_LOG_CATEGORIES",
+            user_settings.log_categories.join(","),
+        );
     }
     let env_requests_rust = std::env::var("USE_EXPERIMENTAL_JNIVM")
         .is_ok_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "true" | "1"));
@@ -209,7 +216,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 "adaptive" => -1,
                 _ => 1,
             },
-            host_libc,
+            host_libc: user_settings.host_libc,
             ..Default::default()
         },
         session: session_name

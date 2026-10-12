@@ -1,17 +1,29 @@
 use gtk::prelude::*;
 use gtk4 as gtk;
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
 const JNI_BACKENDS: &[(&str, &str)] = &[("cpp", "C++ libjnivm (default)"), ("rust", "Rust JNI VM")];
-const LOG_LEVELS: &[(&str, &str)] = &[
-    ("1", "1 — Standard startup logging"),
-    ("2", "2 — Standard + runtime"),
-    ("3", "3 — Standard + runtime + JNI VM"),
-    ("4", "4 — All logs (including key presses)"),
+const LOG_CATEGORIES: &[(&str, &str, &str)] = &[
+    ("base", "Base", "Launcher and Roblox lifecycle messages"),
+    (
+        "runtime",
+        "Runtime",
+        "Android compatibility and runtime details",
+    ),
+    (
+        "jnivm",
+        "JNI / JNI VM",
+        "JNI calls, VM registration, and JNI bridge messages",
+    ),
+    ("linker", "Linker", "Dynamic linker and symbol resolution"),
+    ("stubs", "Stubs", "Calls handled by compatibility stubs"),
+    ("input", "Input", "Keyboard, mouse, and controller events"),
+    ("webview", "WebView", "Roblox embedded browser bridge"),
+    ("session", "Sessions", "Saved login and session activity"),
 ];
 const RENDERERS: &[(&str, &str)] = &[
     ("auto", "Automatic"),
@@ -149,9 +161,10 @@ pub(crate) struct Settings {
     pub gl_swap_interval: String,
     pub rust_jnivm: bool,
     pub jnivm_cpp_fallback: bool,
+    pub host_libc: bool,
     pub fps_limit: Option<u32>,
     pub session: Option<String>,
-    pub log_level: u8,
+    pub log_categories: Vec<String>,
     pub wasd_last_pressed: bool,
 }
 
@@ -167,9 +180,10 @@ impl Default for Settings {
             gl_swap_interval: "on".into(),
             rust_jnivm: false,
             jnivm_cpp_fallback: true,
+            host_libc: false,
             fps_limit: None,
             session: None,
-            log_level: 1,
+            log_categories: vec!["base".into(), "runtime".into()],
             wasd_last_pressed: false,
         }
     }
@@ -224,36 +238,218 @@ pub(crate) fn configured_frame_cap(settings: &Settings) -> Option<u32> {
     settings.fps_limit.or_else(xml_frame_cap)
 }
 
-pub(crate) fn run_ui() -> Result<(), String> {
+pub(crate) fn run_ui() -> Result<bool, String> {
     let app = gtk::Application::builder()
         .application_id("org.rustyblox.Settings")
         .build();
-    app.connect_activate(|app| {
+    let play_requested = Rc::new(Cell::new(false));
+    let play_requested_activate = play_requested.clone();
+    app.connect_activate(move |app| {
         let settings = load();
         let initial_frame_cap = effective_frame_cap(&settings);
         let window = gtk::ApplicationWindow::builder()
             .application(app)
-            .title("rusty-blox Settings")
-            .default_width(520)
-            .default_height(620)
+            .title("rusty-blox")
+            .default_width(960)
+            .default_height(720)
             .build();
+        let css = gtk::CssProvider::new();
+        css.load_from_data(
+            "window { background: #11151d; color: #eff3fa; } .launcher-header { padding: 20px 24px; background: #191f2b; border-bottom: 1px solid #2b3444; } .launcher-title { font-size: 24px; font-weight: 700; } .launcher-subtitle { color: #a6b1c2; } .launcher-footer { padding: 14px 20px; background: #191f2b; border-top: 1px solid #2b3444; } .launcher-page-title { font-size: 20px; font-weight: 650; } .launcher-hero { padding: 28px; background: linear-gradient(135deg, #1c2b40, #18202c); border: 1px solid #35465f; border-radius: 18px; } .launcher-status { padding: 16px; background: #191f2b; border: 1px solid #2b3444; border-radius: 12px; } .launcher-stat { padding: 14px; background: #191f2b; border: 1px solid #2b3444; border-radius: 12px; }",
+        );
+        if let Some(display) = gtk::gdk::Display::default() {
+            gtk::style_context_add_provider_for_display(
+                &display,
+                &css,
+                gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            );
+        }
         let root = gtk::Box::new(gtk::Orientation::Vertical, 12);
         root.set_margin_top(20);
         root.set_margin_bottom(20);
         root.set_margin_start(20);
         root.set_margin_end(20);
+        let header = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        header.add_css_class("launcher-header");
+        let title = gtk::Label::new(Some("rusty-blox"));
+        title.add_css_class("launcher-title");
+        title.set_halign(gtk::Align::Start);
+        header.append(&title);
+        let subtitle = gtk::Label::new(Some("Roblox desktop launcher · configure once, then play"));
+        subtitle.add_css_class("launcher-subtitle");
+        subtitle.set_halign(gtk::Align::Start);
+        header.append(&subtitle);
+        root.append(&header);
         let stack = gtk::Stack::new();
-        let switcher = gtk::StackSwitcher::new();
-        switcher.set_stack(Some(&stack));
-        root.append(&switcher);
+        stack.set_transition_type(gtk::StackTransitionType::Crossfade);
+        stack.set_hexpand(true);
+        stack.set_vexpand(true);
+        let sidebar = gtk::StackSidebar::new();
+        sidebar.set_stack(&stack);
+        sidebar.set_size_request(150, -1);
+        let content = gtk::Box::new(gtk::Orientation::Horizontal, 16);
+        content.set_vexpand(true);
+        content.append(&sidebar);
+        content.append(&stack);
+
+        let home_page = gtk::Box::new(gtk::Orientation::Vertical, 18);
+        home_page.set_margin_start(8);
+        home_page.set_margin_end(8);
+        let hero = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        hero.add_css_class("launcher-hero");
+        let hero_title = gtk::Label::new(Some("Your Roblox, ready to launch."));
+        hero_title.add_css_class("launcher-title");
+        hero_title.set_halign(gtk::Align::Start);
+        hero.append(&hero_title);
+        let hero_copy = gtk::Label::new(Some(
+            "Manage your client, tune the runtime, and jump back into the game.",
+        ));
+        hero_copy.add_css_class("launcher-subtitle");
+        hero_copy.set_halign(gtk::Align::Start);
+        hero.append(&hero_copy);
+        home_page.append(&hero);
+
+        let managed_dir = crate::client::managed_install_dir();
+        let has_managed_client = managed_dir
+            .as_ref()
+            .is_some_and(|path| crate::client::discover_managed_client(path).is_some());
+        let has_sober_client = crate::client::discover_sober_apks().is_some();
+        let install_status = gtk::Label::new(Some(if has_managed_client {
+            "Roblox is installed and ready to play."
+        } else if has_sober_client {
+            "A Sober Roblox install was found. It will be imported when you play."
+        } else {
+            "Roblox is not installed yet. Download the latest client here to get started."
+        }));
+        install_status.set_wrap(true);
+        install_status.set_halign(gtk::Align::Start);
+        let install_card = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        install_card.add_css_class("launcher-status");
+        install_card.append(&install_status);
+        let update_button = gtk::Button::with_label(if has_managed_client {
+            "Check for updates"
+        } else {
+            "Download Roblox"
+        });
+        update_button.set_halign(gtk::Align::Start);
+        install_card.append(&update_button);
+        home_page.append(&install_card);
+        let update_in_progress = Rc::new(Cell::new(false));
+        let update_in_progress_ref = update_in_progress.clone();
+        let client_ready = Rc::new(Cell::new(has_managed_client || has_sober_client));
+        let client_ready_for_update = client_ready.clone();
+        let install_status_ref = install_status.clone();
+        let update_button_ref = update_button.clone();
+        update_button.connect_clicked(move |_| {
+            update_in_progress_ref.set(true);
+            update_button_ref.set_sensitive(false);
+            update_button_ref.set_label("Downloading and verifying…");
+            install_status_ref.set_text("Downloading Roblox. The package signature will be checked before installation.");
+            let (sender, receiver) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let result = std::env::current_exe()
+                    .map_err(|error| error.to_string())
+                    .and_then(|executable| {
+                        std::process::Command::new(executable)
+                            .arg("--update-apk")
+                            .output()
+                            .map_err(|error| format!("start updater: {error}"))
+                    })
+                    .and_then(|output| {
+                        if output.status.success() {
+                            Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+                        } else {
+                            Err(String::from_utf8_lossy(&output.stderr).trim().to_owned())
+                        }
+                    });
+                let _ = sender.send(result);
+            });
+            let status = install_status.clone();
+            let button = update_button_ref.clone();
+            let update_in_progress = update_in_progress_ref.clone();
+            let client_ready = client_ready_for_update.clone();
+            gtk::glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
+                match receiver.try_recv() {
+                    Ok(Ok(message)) => {
+                        update_in_progress.set(false);
+                        client_ready.set(true);
+                        status.set_text(if message.is_empty() {
+                            "Roblox is installed and ready to play."
+                        } else {
+                            &message
+                        });
+                        button.set_label("Check for updates");
+                        button.set_sensitive(true);
+                        gtk::glib::ControlFlow::Break
+                    }
+                    Ok(Err(error)) => {
+                        update_in_progress.set(false);
+                        status.set_text(&format!("Roblox update failed: {error}"));
+                        button.set_label("Try again");
+                        button.set_sensitive(true);
+                        gtk::glib::ControlFlow::Break
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        update_in_progress.set(false);
+                        status.set_text("The updater stopped before reporting a result.");
+                        button.set_label("Try again");
+                        button.set_sensitive(true);
+                        gtk::glib::ControlFlow::Break
+                    }
+                }
+            });
+        });
+
+        let quick_stats = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        let fps_label = initial_frame_cap.to_string();
+        for (title, value) in [
+            (
+                "ACCOUNT",
+                settings.session.as_deref().unwrap_or("No saved session"),
+            ),
+            ("RENDERER", settings.renderer.as_str()),
+            ("FPS LIMIT", fps_label.as_str()),
+        ] {
+            let stat = gtk::Box::new(gtk::Orientation::Vertical, 6);
+            stat.add_css_class("launcher-stat");
+            stat.set_hexpand(true);
+            let title_label = gtk::Label::new(Some(title));
+            title_label.add_css_class("launcher-subtitle");
+            title_label.set_halign(gtk::Align::Start);
+            let value_label = gtk::Label::new(Some(value));
+            value_label.set_halign(gtk::Align::Start);
+            stat.append(&title_label);
+            stat.append(&value_label);
+            quick_stats.append(&stat);
+        }
+        home_page.append(&quick_stats);
+        stack.add_titled(&home_page, Some("home"), "Home");
+
         let settings_page = gtk::Box::new(gtk::Orientation::Vertical, 12);
         let heading = gtk::Label::new(Some("Performance and client settings"));
-        heading.add_css_class("title-2");
+        heading.add_css_class("launcher-page-title");
         heading.set_halign(gtk::Align::Start);
         settings_page.append(&heading);
 
-        let log_level = choice_dropdown(LOG_LEVELS, &settings.log_level.to_string());
-        settings_page.append(&labeled("Runtime log level", &log_level));
+        let logs_box = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        let logs_heading = gtk::Label::new(Some("Log categories"));
+        logs_heading.add_css_class("heading");
+        logs_heading.set_halign(gtk::Align::Start);
+        logs_box.append(&logs_heading);
+        let log_controls: Vec<(String, gtk::CheckButton)> = LOG_CATEGORIES.iter().map(|(id, label, description)| {
+            let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+            let control = gtk::CheckButton::with_label(label);
+            control.set_active(settings.log_categories.iter().any(|category| category == id));
+            let hint = gtk::Label::new(Some(description));
+            hint.set_halign(gtk::Align::Start);
+            hint.set_hexpand(true);
+            row.append(&control);
+            row.append(&hint);
+            logs_box.append(&row);
+            ((*id).to_owned(), control)
+        }).collect();
+        settings_page.append(&logs_box);
         let wasd_last_pressed = gtk::CheckButton::with_label(
             "Prioritize the last pressed WASD direction while opposite keys are held",
         );
@@ -275,6 +471,12 @@ pub(crate) fn run_ui() -> Result<(), String> {
             fallback_ref.set_sensitive(selected_choice_id(backend, JNI_BACKENDS) == Some("rust"));
         });
         settings_page.append(&jni_fallback);
+
+        let host_libc = gtk::CheckButton::with_label(
+            "Use host libc for otherwise unresolved imports (ABI-unsafe diagnostic mode)",
+        );
+        host_libc.set_active(settings.host_libc);
+        settings_page.append(&host_libc);
 
         let gamemode = gtk::CheckButton::with_label("Enable Feral GameMode while Roblox runs");
         gamemode.set_active(settings.gamemode);
@@ -401,14 +603,17 @@ pub(crate) fn run_ui() -> Result<(), String> {
                     .to_owned(),
                 rust_jnivm: selected_choice_id(&jni_backend, JNI_BACKENDS) == Some("rust"),
                 jnivm_cpp_fallback: jni_fallback.is_active(),
+                host_libc: host_libc.is_active(),
                 fps_limit: (limit > 0).then_some(limit),
                 session: picker_for_save
                     .selected()
                     .checked_sub(1)
                     .and_then(|index| session_names_for_save.borrow().get(index as usize).cloned()),
-                log_level: selected_choice_id(&log_level, LOG_LEVELS)
-                    .and_then(|value| value.parse().ok())
-                    .unwrap_or(1),
+                log_categories: log_controls
+                    .iter()
+                    .filter(|(_, control)| control.is_active())
+                    .map(|(id, _)| id.clone())
+                    .collect(),
                 wasd_last_pressed: wasd_last_pressed.is_active(),
             };
             let settings_error = save(&value).err();
@@ -422,11 +627,10 @@ pub(crate) fn run_ui() -> Result<(), String> {
                 status_for_save.set_text(&format!("Saved with frame-cap warnings: {}", errors.join("; ")));
             }
         });
-        settings_page.append(&save_button);
 
         let fast_flags_page = gtk::Box::new(gtk::Orientation::Vertical, 12);
         let fast_flags_heading = gtk::Label::new(Some("FastFlags"));
-        fast_flags_heading.add_css_class("title-2");
+        fast_flags_heading.add_css_class("launcher-page-title");
         fast_flags_heading.set_halign(gtk::Align::Start);
         fast_flags_page.append(&fast_flags_heading);
         let fast_flags_path = fast_flags_path();
@@ -455,24 +659,39 @@ pub(crate) fn run_ui() -> Result<(), String> {
         let fast_flags_save = gtk::Button::with_label("Save FastFlags");
         let fast_flags_buffer = fast_flags_editor.buffer();
         let fast_flags_status_ref = fast_flags_status.clone();
+        let fast_flags_fps = fps.clone();
         fast_flags_save.connect_clicked(move |_| {
             let (start, end) = fast_flags_buffer.bounds();
             let text = fast_flags_buffer.text(&start, &end, true).to_string();
             let parsed = serde_json::from_str::<serde_json::Value>(&text);
             match parsed {
-                Ok(value) if value.is_object() => match write_file(&fast_flags_path, text.as_bytes()) {
-                    Ok(()) => fast_flags_status_ref.set_text("Saved. Flags apply on the next launch."),
-                    Err(error) => fast_flags_status_ref.set_text(&error),
-                },
+                Ok(mut value) if value.is_object() => {
+                    let limit = fast_flags_fps.value_as_int().max(0) as u32;
+                    let Some(flags) = value.as_object_mut() else { unreachable!() };
+                    if limit == 0 {
+                        flags.remove("DFIntTaskSchedulerTargetFps");
+                        flags.remove("FFlagTaskSchedulerLimitTargetFpsTo2402");
+                    } else {
+                        flags.insert("DFIntTaskSchedulerTargetFps".into(), limit.to_string().into());
+                        if limit > 240 { flags.insert("FFlagTaskSchedulerLimitTargetFpsTo2402".into(), "False".into()); }
+                        else { flags.remove("FFlagTaskSchedulerLimitTargetFpsTo2402"); }
+                    }
+                    match serde_json::to_vec_pretty(&value) {
+                        Ok(bytes) => match write_file(&fast_flags_path, &bytes) {
+                            Ok(()) => fast_flags_status_ref.set_text("Saved. Flags apply on the next launch."),
+                            Err(error) => fast_flags_status_ref.set_text(&error),
+                        },
+                        Err(error) => fast_flags_status_ref.set_text(&error.to_string()),
+                    }
+                }
                 Ok(_) => fast_flags_status_ref.set_text("FastFlags must be a JSON object."),
                 Err(error) => fast_flags_status_ref.set_text(&format!("Invalid JSON: {error}")),
             }
         });
-        fast_flags_page.append(&fast_flags_save);
 
         let game_settings_page = gtk::Box::new(gtk::Orientation::Vertical, 12);
         let game_heading = gtk::Label::new(Some("Game settings"));
-        game_heading.add_css_class("title-2");
+        game_heading.add_css_class("launcher-page-title");
         game_heading.set_halign(gtk::Align::Start);
         game_settings_page.append(&game_heading);
         let game_path = game_settings_path();
@@ -600,11 +819,10 @@ pub(crate) fn run_ui() -> Result<(), String> {
                 game_status_ref.set_text(&format!("Saved with frame-cap warnings: {}", errors.join("; ")));
             }
         });
-        game_settings_page.append(&game_save);
 
         let session_page = gtk::Box::new(gtk::Orientation::Vertical, 12);
         let session_heading = gtk::Label::new(Some("Roblox sessions"));
-        session_heading.add_css_class("title-2");
+        session_heading.add_css_class("launcher-page-title");
         session_heading.set_halign(gtk::Align::Start);
         session_page.append(&session_heading);
         session_page.append(&labeled("Use this session on the next launch", &session_picker));
@@ -631,7 +849,6 @@ pub(crate) fn run_ui() -> Result<(), String> {
                 Err(error) => status_for_default.set_text(&error),
             }
         });
-        session_page.append(&set_default);
         session_page.append(&session_status);
         let add_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         let session_name = gtk::Entry::builder().placeholder_text("New session name").hexpand(true).build();
@@ -662,24 +879,96 @@ pub(crate) fn run_ui() -> Result<(), String> {
                         names.len() - 1
                     };
                     picker_ref.set_selected(index as u32 + 1);
-                    status_ref.set_text(&format!("Added session '{}'. Select it and set it as the default to use it on launch.", session.name()));
+                    status_ref.set_text(&format!("Added session '{}'. It will be saved when you choose Save & Play.", session.name()));
                     name_ref.set_text("");
                 }
                 Err(error) => status_ref.set_text(&error),
             }
         });
-        stack.add_titled(&settings_page, Some("general"), "General");
+        let settings_scroll = gtk::ScrolledWindow::builder()
+            .hexpand(true)
+            .vexpand(true)
+            .child(&settings_page)
+            .build();
+        stack.add_titled(&settings_scroll, Some("general"), "General");
         stack.add_titled(&fast_flags_page, Some("fast-flags"), "FastFlags");
         stack.add_titled(&game_settings_page, Some("game"), "Game");
         stack.add_titled(&session_page, Some("sessions"), "Sessions");
-        root.append(&stack);
+        let footer = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+        footer.set_margin_top(12);
+        footer.set_margin_bottom(12);
+        footer.set_margin_start(20);
+        footer.set_margin_end(20);
+        let play_status = gtk::Label::new(Some("Your changes are saved before Roblox starts."));
+        play_status.set_halign(gtk::Align::Start);
+        play_status.set_hexpand(true);
+        footer.append(&play_status);
+        let play_button = gtk::Button::with_label("Play Roblox");
+        play_button.add_css_class("suggested-action");
+        play_button.set_size_request(150, 42);
+        let play_button_label = play_button.clone();
+        stack.connect_visible_child_notify(move |stack| {
+            let label = if stack.visible_child_name().as_deref() == Some("home") {
+                "Play Roblox"
+            } else {
+                "Save & Play"
+            };
+            play_button_label.set_label(label);
+        });
+        let save_all = save_button.clone();
+        let save_flags = fast_flags_save.clone();
+        let save_game = game_save.clone();
+        let main_status = status.clone();
+        let flags_status = fast_flags_status.clone();
+        let saved_game_status = game_status.clone();
+        let play_status_ref = play_status.clone();
+        let window_for_play = window.clone();
+        let play_requested = play_requested_activate.clone();
+        let update_in_progress = update_in_progress.clone();
+        let client_ready = client_ready.clone();
+        play_button.connect_clicked(move |_| {
+            if update_in_progress.get() {
+                play_status_ref.set_text("Wait for the Roblox download or update to finish first.");
+                return;
+            }
+            if !client_ready.get() {
+                play_status_ref.set_text("Download Roblox first, or install it through Sober and restart rusty-blox.");
+                return;
+            }
+            save_all.emit_clicked();
+            save_flags.emit_clicked();
+            save_game.emit_clicked();
+            let main_message = main_status.text().to_string();
+            let flags_message = flags_status.text().to_string();
+            let game_message = saved_game_status.text().to_string();
+            let failed = main_message.contains("settings:")
+                || main_message.contains("FastFlags JSON")
+                || !flags_message.starts_with("Saved")
+                || game_message.starts_with("Could not read")
+                || game_message.starts_with("XML:")
+                || game_message.starts_with("Saved with frame-cap warnings: XML:");
+            if failed {
+                let messages = [main_message, flags_message, game_message]
+                    .into_iter()
+                    .filter(|message| !message.is_empty())
+                    .collect::<Vec<_>>();
+                play_status_ref.set_text(&messages.join(" · "));
+                return;
+            }
+            play_requested.set(true);
+            window_for_play.close();
+        });
+        footer.append(&play_button);
+        footer.add_css_class("launcher-footer");
+        root.append(&content);
+        root.append(&footer);
         window_ref.set_child(Some(&root));
         window_ref.present();
     });
     // `--settings` was already consumed by rusty-blox. Do not pass it on to
     // GTK's own command-line parser, which rejects unknown application args.
     app.run_with_args(&["rusty-blox-settings"]);
-    Ok(())
+    Ok(play_requested.get())
 }
 
 fn write_file(path: &std::path::Path, contents: &[u8]) -> Result<(), String> {
