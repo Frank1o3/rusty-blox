@@ -7,6 +7,7 @@ macro_rules! eprintln {
     }};
 }
 
+mod apk_update;
 mod app;
 mod client;
 mod client_settings;
@@ -34,13 +35,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut client_settings = None;
     let mut host_libc = false;
     let mut settings_mode = false;
+    let mut update_apk = false;
+    let mut import_sober = false;
     let mut session_name: Option<String> = None;
     while let Some(arg) = args.next() {
         match arg.to_str() {
             Some("--help" | "-h") => {
                 println!(
-                    "Usage: rusty-blox [--settings] [--session NAME|--add-session NAME] [--host-libc] [--fast-flags FILE] [--client-settings FILE] [APK]\n\
-                     Without APK, the client looks for Sober's x86-64 installation.\n\
+                    "Usage: rusty-blox [--settings] [--update-apk|--import-sober] [--session NAME|--add-session NAME] [--host-libc] [--fast-flags FILE] [--client-settings FILE] [APK]\n\
+                     --update-apk downloads and installs the latest Roblox Android x86-64 APK.\n\
+                     --import-sober refreshes the managed APK from Sober's installed build.\n\
+                     Without APK, the client uses its managed installation or imports Sober's x86-64 installation.\n\
                      Without --session, Roblox starts without a saved login. --add-session NAME creates/selects a named login profile.\n\
                      --host-libc enables the runtime's ABI-unsafe diagnostic resolver."
                 );
@@ -48,6 +53,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             Some("--host-libc") => host_libc = true,
             Some("--settings") => settings_mode = true,
+            Some("--update-apk" | "--download-apk") => update_apk = true,
+            Some("--import-sober") => import_sober = true,
             Some("--session") | Some("--add-session") => {
                 session_name = Some(
                     args.next()
@@ -73,12 +80,28 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             _ => return Err("only one base APK path may be supplied".into()),
         }
     }
+    if update_apk && (import_sober || apk_arg.is_some()) {
+        return Err("--update-apk cannot be combined with --import-sober or an APK path".into());
+    }
+    if import_sober && apk_arg.is_some() {
+        return Err("--import-sober cannot be combined with an APK path".into());
+    }
     if settings_mode {
         return settings::run_ui().map_err(Into::into);
     }
     let lock_root = client::managed_install_dir().ok_or("HOME and XDG_DATA_HOME are unset")?;
     std::fs::create_dir_all(&lock_root)?;
-    let _instance_lock = InstanceLock::acquire(&lock_root.join("roblox-instance.lock"))?;
+    let instance_lock = lock_root
+        .parent()
+        .ok_or("managed installation directory has no parent")?
+        .join("roblox-instance.lock");
+    let _instance_lock = InstanceLock::acquire(&instance_lock)?;
+    if update_apk {
+        client::migrate_legacy_sessions(&lock_root)?;
+        let version = apk_update::update(&lock_root)?;
+        println!("Installed Roblox Android x86-64 version {version}");
+        return Ok(());
+    }
     let user_settings = settings::load();
     let log_level = user_settings.log_level.clamp(1, 4);
     unsafe {
@@ -131,20 +154,29 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    let apks = apk_arg
-        .map(|base| {
-            let mut apks = vec![base.clone()];
-            let x86_split = base.with_file_name("split_config.x86_64.apk");
-            if x86_split.is_file() {
-                apks.push(x86_split);
-            }
-            apks
-        })
-        .or_else(client::discover_sober_apks)
-        .ok_or("no APK argument and no Sober x86-64 APK was found")?;
     let managed_dir = client::managed_install_dir().ok_or("HOME and XDG_DATA_HOME are unset")?;
     client::migrate_legacy_sessions(&managed_dir)?;
-    let imported = client::import_apks(&apks, &managed_dir)?;
+    let imported = if let Some(base) = apk_arg {
+        let mut apks = vec![base.clone()];
+        let x86_split = base.with_file_name("split_config.x86_64.apk");
+        if x86_split.is_file() {
+            apks.push(x86_split);
+        }
+        client::import_apks(&apks, &managed_dir)?
+    } else if import_sober {
+        let apks =
+            client::discover_sober_apks().ok_or("no Sober x86-64 APK was found to import")?;
+        client::import_apks(&apks, &managed_dir)?
+    } else if let Some(installed) = client::discover_managed_client(&managed_dir) {
+        installed
+    } else if let Some(apks) = client::discover_sober_apks() {
+        client::import_apks(&apks, &managed_dir)?
+    } else {
+        return Err(
+            "no managed APK or Sober x86-64 APK was found; run with --update-apk or provide an APK"
+                .into(),
+        );
+    };
     let client_root = managed_dir
         .parent()
         .ok_or("managed installation directory has no parent")?;

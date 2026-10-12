@@ -32,6 +32,38 @@ pub fn discover_sober_apks() -> Option<Vec<PathBuf>> {
     Some(apks)
 }
 
+/// Reuse a previously imported or downloaded managed installation.
+pub fn discover_managed_client(managed_dir: &Path) -> Option<ImportedClient> {
+    let base = managed_dir.join("base.apk");
+    let base = if base.is_file() {
+        base
+    } else {
+        fs::read_dir(managed_dir)
+            .ok()?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .find(|path| {
+                path.extension().is_some_and(|extension| extension == "apk")
+                    && path
+                        .file_name()
+                        .is_some_and(|name| name != "split_config.x86_64.apk")
+            })?
+    };
+    let native_lib_dir = managed_dir.join("lib/x86_64");
+    if !base.is_file() || !native_lib_dir.join("libroblox.so").is_file() {
+        return None;
+    }
+    let mut apk_paths = vec![base];
+    let split = managed_dir.join("split_config.x86_64.apk");
+    if split.is_file() {
+        apk_paths.push(split);
+    }
+    Some(ImportedClient {
+        apk_paths,
+        native_lib_dir,
+    })
+}
+
 /// Choose the client's persistent installation directory.
 pub fn managed_install_dir() -> Option<PathBuf> {
     if let Some(data_home) = env::var_os("XDG_DATA_HOME") {

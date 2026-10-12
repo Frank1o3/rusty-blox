@@ -10,11 +10,16 @@ with the APK/native-library locations, data and cache paths, configuration and
 a renderable host surface. The runtime does not discover APKs or create the
 client's top-level window.
 
-The current binary accepts a base APK path or looks for Sober's x86-64
-`base.apk` and `split_config.x86_64.apk`, then copies them and extracts
-`lib/x86_64/*.so` from the APK set into
+The current binary accepts a base APK path, reuses its managed installation,
+or looks for Sober's x86-64 `base.apk` and `split_config.x86_64.apk`, then
+copies them and extracts `lib/x86_64/*.so` from the APK set into
 `$XDG_DATA_HOME/rusty-blox/roblox` (or `~/.local/share/rusty-blox/roblox`).
 Unchanged APK source files are reused on later starts.
+Run `rusty-blox --update-apk` to download and install the latest x86-64 build
+from APKPure. The download is checked against Roblox's pinned APK signing
+certificate before it can replace the managed installation. Roblox does not
+provide a public generic Android APK download endpoint; use `--import-sober` to
+refresh from a Google Play build installed through Sober, or supply an APK path.
 The client builds a `RuntimeConfig` from those managed APK, library, data and
 cache paths, prepares Android filesystem and asset views, then creates a winit
 window on X11 or Wayland. For Wayland it owns a `wl_egl_window` for as long as
@@ -27,9 +32,10 @@ forwarded to the runtime. The runtime event pump and render context remain
 unfinished, so reaching GameActivity startup does not establish that a
 playable game appears.
 
-Pass a base APK as the positional argument, or use Sober's installed build. The
-client also accepts `--fast-flags FILE` and `--client-settings FILE` and passes
-those inputs in `RuntimeConfig`. `--host-libc` opts into the runtime's
+Pass a base APK as the positional argument, use Sober's installed build, or run
+`--update-apk`. Use `--import-sober` to refresh an existing managed build from
+Sober. The client also accepts `--fast-flags FILE` and `--client-settings FILE`
+and passes those inputs in `RuntimeConfig`. `--host-libc` opts into the runtime's
 ABI-unsafe diagnostic symbol resolver; it is off by default.
 
 Without `--fast-flags`, the client loads `fast-flags.json` beside its settings
