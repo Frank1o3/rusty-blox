@@ -30,6 +30,8 @@ pub(crate) struct ClientApp {
     cursor: (f32, f32),
     modifiers: ModifiersState,
     cursor_locked: bool,
+    cursor_rebase_pending: bool,
+    pressed_mouse_buttons: HashSet<i32>,
     window_focused: bool,
     cursor_inside: bool,
     textbox_focused: bool,
@@ -84,6 +86,8 @@ impl ClientApp {
             cursor: (0.0, 0.0),
             modifiers: winit::keyboard::ModifiersState::empty(),
             cursor_locked: false,
+            cursor_rebase_pending: false,
+            pressed_mouse_buttons: HashSet::new(),
             window_focused: false,
             cursor_inside: false,
             textbox_focused: false,
@@ -259,12 +263,14 @@ impl winit::application::ApplicationHandler for ClientApp {
                 self.window_focused = focused;
                 if !focused {
                     self.clear_movement_keys(event_loop);
+                    self.clear_mouse_buttons(event_loop);
                 }
                 if !focused && self.cursor_locked {
                     if let Some(window) = self.window.as_ref() {
                         let _ = window.set_cursor_grab(CursorGrabMode::None);
                     }
                     self.cursor_locked = false;
+                    self.cursor_rebase_pending = true;
                 }
                 self.update_system_cursor_visibility();
             }
@@ -279,6 +285,11 @@ impl winit::application::ApplicationHandler for ClientApp {
             WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers.state(),
             WindowEvent::CursorMoved { position, .. } => {
                 let next = (position.x as f32, position.y as f32);
+                if self.cursor_rebase_pending {
+                    self.cursor = next;
+                    self.cursor_rebase_pending = false;
+                    return;
+                }
                 let delta = (next.0 - self.cursor.0, next.1 - self.cursor.1);
                 self.cursor = next;
                 if !self.cursor_locked {
@@ -287,12 +298,16 @@ impl winit::application::ApplicationHandler for ClientApp {
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 if let Some(button) = android_mouse_button(button) {
-                    self.forward_mouse_button(
-                        self.cursor,
-                        state == ElementState::Pressed,
-                        button,
-                        event_loop,
-                    );
+                    let down = state == ElementState::Pressed;
+                    let should_forward = if down {
+                        self.pressed_mouse_buttons.insert(button)
+                    } else {
+                        self.pressed_mouse_buttons.remove(&button)
+                    };
+                    if should_forward {
+                        let position = self.mouse_position();
+                        self.forward_mouse_button(position, down, button, event_loop);
+                    }
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -432,7 +447,7 @@ impl winit::application::ApplicationHandler for ClientApp {
             let _ = roblox_runtime::android::looper::poll_for_current_thread(0);
             self.refresh_text_focus();
             self.sync_text_overlay();
-            self.sync_cursor_lock();
+            self.sync_cursor_lock(event_loop);
             if let Some(engine) = &self.engine {
                 if let Some(session_dir) = &self.session_dir {
                     roblox_runtime::session::flush_if_due(engine, session_dir);
@@ -441,7 +456,13 @@ impl winit::application::ApplicationHandler for ClientApp {
             roblox_runtime::gc_if_due();
         }
         let poll_interval_ms = crate::settings::configured_frame_cap(&self.settings)
-            .map(|cap| if cap == 0 { 4 } else { (1000 / cap).clamp(2, 16) as u64 })
+            .map(|cap| {
+                if cap == 0 {
+                    4
+                } else {
+                    (1000 / cap).clamp(2, 16) as u64
+                }
+            })
             .unwrap_or(16);
         event_loop.set_control_flow(ControlFlow::WaitUntil(
             std::time::Instant::now() + std::time::Duration::from_millis(poll_interval_ms),
@@ -726,7 +747,7 @@ impl ClientApp {
         }
     }
 
-    fn sync_cursor_lock(&mut self) {
+    fn sync_cursor_lock(&mut self, event_loop: &ActiveEventLoop) {
         let Some(window) = self.window.as_ref() else {
             return;
         };
@@ -761,6 +782,7 @@ impl ClientApp {
             match result {
                 Ok(()) => {
                     self.cursor_locked = true;
+                    self.cursor_rebase_pending = true;
                     self.update_system_cursor_visibility();
                     eprintln!("rusty-blox: cursor captured by Roblox");
                 }
@@ -771,8 +793,28 @@ impl ClientApp {
                 eprintln!("rusty-blox: cursor release failed: {error}");
             }
             self.cursor_locked = false;
+            self.cursor_rebase_pending = true;
+            self.clear_mouse_buttons(event_loop);
             self.update_system_cursor_visibility();
             eprintln!("rusty-blox: cursor released by Roblox");
+        }
+    }
+
+    fn mouse_position(&self) -> (f32, f32) {
+        if self.cursor_locked {
+            if let Some(window) = self.window.as_ref() {
+                let size = window.inner_size();
+                return (size.width as f32 / 2.0, size.height as f32 / 2.0);
+            }
+        }
+        self.cursor
+    }
+
+    fn clear_mouse_buttons(&mut self, event_loop: &ActiveEventLoop) {
+        let position = self.mouse_position();
+        let pressed = std::mem::take(&mut self.pressed_mouse_buttons);
+        for button in pressed {
+            self.forward_mouse_button(position, false, button, event_loop);
         }
     }
 

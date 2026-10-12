@@ -151,6 +151,10 @@ unsafe extern "C" fn buffer_release(data: *mut c_void, _buffer: *mut Proxy) {
 
 struct ShmBuffer {
     proxy: *mut Proxy,
+    // Keep the memfd alive through the display flush. Wayland queues the
+    // create_pool request with this descriptor, and closing it while the
+    // request is still queued can make libwayland fail its fd duplication.
+    _file: File,
     // libwayland may retain the listener table address on the proxy and call
     // it later, when wl_buffer.release arrives. Keep that table alive for the
     // same lifetime as the buffer proxy.
@@ -231,9 +235,8 @@ impl ShmBuffer {
             return Err("wl_shm_create_pool returned null".to_owned());
         }
         trace_overlay("shared-memory pool created");
-        // SAFETY: pool creation copied the fd into Wayland's outgoing message.
-        // Flush before `file` closes below so the compositor receives it.
-        // Buffer creation itself follows wl_shm_pool.create_buffer's ABI.
+        // SAFETY: the fd remains owned by `file` through the later display
+        // flush. Buffer creation itself follows wl_shm_pool.create_buffer's ABI.
         let buffer = unsafe {
             marshal(
                 pool,
@@ -283,9 +286,9 @@ impl ShmBuffer {
             return Err("could not install the Wayland text buffer listener".to_owned());
         }
         trace_overlay("buffer release listener installed");
-        drop(file);
         Ok(Self {
             proxy: buffer,
+            _file: file,
             _listener: listener,
             mapping,
             mapping_len: size as usize,
