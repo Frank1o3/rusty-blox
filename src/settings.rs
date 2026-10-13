@@ -2,7 +2,7 @@ use gtk::prelude::*;
 use gtk4 as gtk;
 use serde::{Deserialize, Serialize};
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -41,6 +41,30 @@ const GL_SWAP_INTERVALS: &[(&str, &str)] = &[
     ("off", "Off (0)"),
     ("on", "On (1)"),
     ("adaptive", "Adaptive (-1, if supported)"),
+];
+const THEME_MODES: &[(&str, &str)] = &[("system", "System"), ("dark", "Dark"), ("light", "Light")];
+const THEME_PRESETS: &[(&str, &str)] = &[
+    ("default", "Default"),
+    ("oled", "OLED"),
+    ("moled", "MOLED"),
+    ("glass", "Glass"),
+    ("midnight", "Midnight"),
+    ("nord", "Nord"),
+    ("dracula", "Dracula"),
+    ("rose-pine", "Rosé Pine"),
+    ("solarized", "Solarized"),
+    ("forest", "Forest"),
+    ("sunset", "Sunset"),
+];
+const THEME_ACCENTS: &[(&str, &str)] = &[
+    ("preset", "Match preset"),
+    ("blue", "Blue"),
+    ("violet", "Violet"),
+    ("teal", "Teal"),
+    ("green", "Green"),
+    ("rose", "Rose"),
+    ("amber", "Amber"),
+    ("cyan", "Cyan"),
 ];
 const GAME_BOOLEAN_OPTIONS: &[(&str, &str)] = &[
     ("AllTutorialsDisabled", "Disable all tutorials"),
@@ -166,6 +190,12 @@ pub(crate) struct Settings {
     pub session: Option<String>,
     pub log_categories: Vec<String>,
     pub wasd_last_pressed: bool,
+    pub disabled_fast_flags: Vec<String>,
+    pub theme_mode: String,
+    pub theme_preset: String,
+    pub theme_accent: String,
+    pub animations: bool,
+    pub hardware_acceleration: bool,
 }
 
 impl Default for Settings {
@@ -185,6 +215,12 @@ impl Default for Settings {
             session: None,
             log_categories: vec!["base".into(), "runtime".into()],
             wasd_last_pressed: false,
+            disabled_fast_flags: Vec::new(),
+            theme_mode: "dark".into(),
+            theme_preset: "default".into(),
+            theme_accent: "preset".into(),
+            animations: true,
+            hardware_acceleration: true,
         }
     }
 }
@@ -225,6 +261,344 @@ pub(crate) fn save(settings: &Settings) -> Result<(), String> {
     std::fs::rename(&temp, &path).map_err(|e| format!("save settings: {e}"))
 }
 
+fn accent_color(mode: &str, preset: &str, accent: &str) -> &'static str {
+    let light = mode != "dark";
+    if accent == "preset" {
+        return match (light, preset) {
+            (_, "dracula" | "rose-pine") => "#bd93f9",
+            (_, "nord" | "solarized") => "#4d91b5",
+            (_, "forest") => "#4b9b63",
+            (_, "sunset") => "#d77a48",
+            (false, "glass") => "#9a8cff",
+            (false, "oled") => "#46a0ff",
+            (false, "moled" | "midnight") => "#6ca8ff",
+            (true, "glass") => "#6757d9",
+            (_, _) => "#2878e5",
+        };
+    }
+    match (light, accent) {
+        (true, "violet") => "#7057d8",
+        (true, "teal") => "#13877e",
+        (true, "green") => "#32824f",
+        (true, "rose") => "#cf5470",
+        (true, "amber") => "#a86112",
+        (true, "cyan") => "#087fa6",
+        (false, "violet") => "#aa96ff",
+        (false, "teal") => "#61cdbd",
+        (false, "green") => "#78c995",
+        (false, "rose") => "#ff829b",
+        (false, "amber") => "#f5b864",
+        (false, "cyan") => "#62c8ec",
+        (true, _) => "#2878e5",
+        (false, _) => "#69a5ff",
+    }
+}
+
+fn theme_css(mode: &str, preset: &str, accent_id: &str) -> String {
+    if mode == "system" {
+        return "window { background: @theme_bg_color; color: @theme_fg_color; } .launcher-shell { padding: 10px; } .launcher-header { padding: 17px 21px; background: @theme_base_color; border: 1px solid alpha(@theme_fg_color, 0.12); border-radius: 14px; } .launcher-title { font-size: 23px; font-weight: 700; letter-spacing: -0.3px; } .launcher-subtitle { color: @insensitive_fg_color; } .launcher-sidebar { padding: 8px; background: @theme_base_color; border: 1px solid alpha(@theme_fg_color, 0.12); border-radius: 14px; } stacksidebar row { padding: 8px 10px; border-radius: 9px; } stacksidebar row:selected { background: @theme_selected_bg_color; color: @theme_selected_fg_color; } .launcher-content { padding: 5px 0 5px 3px; } .launcher-footer { padding: 12px 16px; background: @theme_base_color; border: 1px solid alpha(@theme_fg_color, 0.12); border-radius: 14px; } .launcher-page { padding: 8px 10px 16px; } .launcher-page-title { font-size: 21px; font-weight: 700; letter-spacing: -0.2px; } .launcher-page-copy { color: @insensitive_fg_color; } .launcher-hero { padding: 26px; background: @theme_base_color; border: 1px solid alpha(@theme_fg_color, 0.12); border-radius: 15px; } .launcher-status, .launcher-stat, .launcher-card { padding: 16px; background: @theme_base_color; border: 1px solid alpha(@theme_fg_color, 0.12); border-radius: 12px; } .launcher-card checkbutton, .launcher-page > checkbutton { padding: 5px 2px; } .launcher-flag-row { padding: 10px 12px; border-bottom: 1px solid alpha(@theme_fg_color, 0.09); } button { min-height: 34px; padding: 4px 12px; border-radius: 9px; } button.suggested-action { background: @theme_selected_bg_color; color: @theme_selected_fg_color; } entry, textview, spinbutton, dropdown, combobox { border-radius: 8px; } .launcher-eyebrow { color: $ACCENT_COLOR; font-size: 11px; font-weight: 700; letter-spacing: 1px; } .launcher-stat-title { color: @insensitive_fg_color; font-size: 11px; font-weight: 700; letter-spacing: 0.6px; } .launcher-stat-value { font-size: 16px; font-weight: 650; } .launcher-pill { padding: 5px 9px; background: alpha($ACCENT_COLOR, 0.14); border-radius: 999px; }".replace("$ACCENT_COLOR", accent_color(mode, preset, accent_id));
+    }
+    let accent = accent_color(mode, preset, accent_id);
+    let light = mode == "light";
+    let (background, surface, surface_alt, text, muted, border, _preset_accent) =
+        match (light, preset) {
+            (true, "oled") => (
+                "#f8fafc", "#ffffff", "#eef2f7", "#172033", "#64748b", "#d5dce7", "#1677e8",
+            ),
+            (true, "glass") => (
+                "#e8eef7",
+                "rgba(255,255,255,0.82)",
+                "rgba(237,243,251,0.78)",
+                "#172033",
+                "#64748b",
+                "#c7d3e2",
+                "#6757d9",
+            ),
+            (true, "moled") => (
+                "#edf2fa", "#e1e9f5", "#d5e0f0", "#18243a", "#62718a", "#c2cee0", "#2775db",
+            ),
+            (true, "midnight") => (
+                "#edf1f9", "#ffffff", "#e2e9f5", "#1c2940", "#64748b", "#cbd5e3", "#496eb1",
+            ),
+            (true, "nord") => (
+                "#eceff4", "#ffffff", "#e5e9f0", "#2e3440", "#616e88", "#d4d9e2", "#5e81ac",
+            ),
+            (true, "dracula") => (
+                "#f4f2f8", "#ffffff", "#ece8f4", "#282a36", "#696779", "#d9d4e3", "#8b63c7",
+            ),
+            (true, "rose-pine") => (
+                "#f6f1f2", "#fffafa", "#eee5e8", "#433b4a", "#796f7f", "#dfd1d7", "#a55d79",
+            ),
+            (true, "solarized") => (
+                "#fdf6e3", "#fffdf5", "#eee8d5", "#586e75", "#839496", "#ded7c6", "#268bd2",
+            ),
+            (true, "forest") => (
+                "#eff4ef", "#ffffff", "#e4ede5", "#26382c", "#687a6c", "#d0ded2", "#3d8054",
+            ),
+            (true, "sunset") => (
+                "#fbf1ec", "#fffaf6", "#f4e4dc", "#49353b", "#806b6e", "#e6d1c8", "#c56a42",
+            ),
+            (true, _) => (
+                "#f2f4f8", "#ffffff", "#e9edf3", "#202938", "#697586", "#d6dce5", "#2878e5",
+            ),
+            (false, "oled") => (
+                "#000000", "#080808", "#111111", "#f4f7fb", "#9aa6b6", "#252525", "#46a0ff",
+            ),
+            (false, "glass") => (
+                "#111722",
+                "rgba(30,39,54,0.82)",
+                "rgba(39,50,68,0.78)",
+                "#f1f5fc",
+                "#a7b4c7",
+                "#45536a",
+                "#9a8cff",
+            ),
+            (false, "moled") => (
+                "#101827", "#182337", "#202e45", "#edf3fc", "#a7b5ca", "#34445e", "#6ca8ff",
+            ),
+            (false, "midnight") => (
+                "#0a0f1c", "#10192a", "#17243a", "#eef3fc", "#9aa9c0", "#293850", "#70a4ff",
+            ),
+            (false, "nord") => (
+                "#2e3440", "#3b4252", "#434c5e", "#eceff4", "#c3cad5", "#525e72", "#88c0d0",
+            ),
+            (false, "dracula") => (
+                "#21222c", "#282a36", "#343746", "#f8f8f2", "#b8b7c5", "#45475a", "#bd93f9",
+            ),
+            (false, "rose-pine") => (
+                "#191724", "#1f1d2e", "#26233a", "#e0def4", "#a6a3c0", "#403c56", "#c4a7e7",
+            ),
+            (false, "solarized") => (
+                "#002b36", "#073642", "#0b414b", "#fdf6e3", "#93a1a1", "#31535b", "#2aa198",
+            ),
+            (false, "forest") => (
+                "#101b18", "#17251f", "#20342b", "#edf5ee", "#a3b5a7", "#344c3d", "#75c58d",
+            ),
+            (false, "sunset") => (
+                "#211a24", "#30222c", "#412c34", "#fff2e8", "#c8aeb0", "#573a42", "#ff9e64",
+            ),
+            (false, _) => (
+                "#11151d", "#191f2b", "#252c38", "#eff3fa", "#a6b1c2", "#2b3444", "#3887ed",
+            ),
+        };
+    format!(
+        "window {{ background: {background}; color: {text}; }} .launcher-shell {{ padding: 10px; }} .launcher-header {{ padding: 17px 21px; background: {surface}; border: 1px solid {border}; border-radius: 14px; }} .launcher-title {{ font-size: 23px; font-weight: 700; letter-spacing: -0.3px; }} .launcher-subtitle {{ color: {muted}; }} .launcher-sidebar {{ padding: 8px; background: {surface}; border: 1px solid {border}; border-radius: 14px; }} stacksidebar row {{ padding: 8px 10px; border-radius: 9px; }} stacksidebar row:selected {{ background: {surface_alt}; }} .launcher-content {{ padding: 5px 0 5px 3px; }} .launcher-footer {{ padding: 12px 16px; background: {surface}; border: 1px solid {border}; border-radius: 14px; }} .launcher-page {{ padding: 8px 10px 16px; }} .launcher-page-title {{ font-size: 21px; font-weight: 700; letter-spacing: -0.2px; }} .launcher-page-copy {{ color: {muted}; }} .launcher-hero {{ padding: 26px; background: {surface_alt}; border: 1px solid {border}; border-radius: 15px; }} .launcher-status, .launcher-stat, .launcher-card {{ padding: 16px; background: {surface}; border: 1px solid {border}; border-radius: 12px; }} .launcher-card checkbutton, .launcher-page > checkbutton {{ padding: 5px 2px; }} .launcher-flag-row {{ padding: 10px 12px; border-bottom: 1px solid {border}; }} button {{ min-height: 34px; padding: 4px 12px; border-radius: 9px; }} button.suggested-action {{ background: {accent}; }} entry, textview, spinbutton, dropdown, combobox {{ border-radius: 8px; }} .launcher-eyebrow {{ color: {accent}; font-size: 11px; font-weight: 700; letter-spacing: 1px; }} .launcher-stat-title {{ color: {muted}; font-size: 11px; font-weight: 700; letter-spacing: 0.6px; }} .launcher-stat-value {{ font-size: 16px; font-weight: 650; }} .launcher-pill {{ padding: 5px 9px; background: {surface_alt}; border-radius: 999px; }}"
+    )
+}
+
+fn set_interface_color_scheme(settings: &gtk::Settings, mode: &str, system_dark: bool) {
+    if let Some(property) = settings.find_property("gtk-interface-color-scheme") {
+        if let Some(enum_class) = gtk::glib::EnumClass::with_type(property.value_type()) {
+            let nick = match mode {
+                "dark" => "dark",
+                "light" => "light",
+                _ => "default",
+            };
+            if let Some(value) = enum_class.value_by_nick(nick) {
+                settings.set_property_from_value(
+                    "gtk-interface-color-scheme",
+                    &value.to_value(&enum_class),
+                );
+            }
+        }
+    } else {
+        // GTK before 4.20 lacks gtk-interface-color-scheme.
+        settings.set_property(
+            "gtk-application-prefer-dark-theme",
+            match mode {
+                "dark" => true,
+                "light" => false,
+                _ => system_dark,
+            },
+        );
+    }
+}
+
+fn parse_flag_value(text: &str, original: &serde_json::Value) -> Option<serde_json::Value> {
+    match original {
+        serde_json::Value::String(_) => Some(text.to_owned().into()),
+        serde_json::Value::Number(_) => serde_json::from_str(text)
+            .ok()
+            .filter(serde_json::Value::is_number),
+        serde_json::Value::Bool(_) => text.parse::<bool>().ok().map(Into::into),
+        _ => serde_json::from_str(text).ok(),
+    }
+}
+
+fn render_fast_flag_rows(
+    table: &gtk::Box,
+    flags: Rc<RefCell<BTreeMap<String, serde_json::Value>>>,
+    disabled: Rc<RefCell<HashSet<String>>>,
+    parent: gtk::Window,
+    status: gtk::Label,
+) {
+    while let Some(child) = table.first_child() {
+        table.remove(&child);
+    }
+    for (key, value) in flags.borrow().iter() {
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+        row.add_css_class("launcher-flag-row");
+        let key_label = gtk::Label::new(Some(key));
+        key_label.set_halign(gtk::Align::Start);
+        key_label.set_hexpand(true);
+        key_label.set_ellipsize(gtk::pango::EllipsizeMode::Middle);
+        row.append(&key_label);
+        if let Some(boolean) = value.as_bool() {
+            let enabled = gtk::CheckButton::with_label("True");
+            enabled.set_active(boolean);
+            let key = key.clone();
+            let values = flags.clone();
+            enabled.connect_toggled(move |control| {
+                values
+                    .borrow_mut()
+                    .insert(key.clone(), control.is_active().into());
+            });
+            row.append(&enabled);
+        } else {
+            let enabled = gtk::CheckButton::with_label("Enabled");
+            enabled.set_active(!disabled.borrow().contains(key));
+            let key_for_toggle = key.clone();
+            let off = disabled.clone();
+            enabled.connect_toggled(move |control| {
+                if control.is_active() {
+                    off.borrow_mut().remove(&key_for_toggle);
+                } else {
+                    off.borrow_mut().insert(key_for_toggle.clone());
+                }
+            });
+            row.append(&enabled);
+            let entry = gtk::Entry::new();
+            entry.set_hexpand(true);
+            entry.set_width_chars(16);
+            entry.set_text(&match value {
+                serde_json::Value::String(text) => text.clone(),
+                _ => value.to_string(),
+            });
+            let original = value.clone();
+            let key_for_value = key.clone();
+            let values = flags.clone();
+            entry.connect_changed(move |entry| {
+                if let Some(value) = parse_flag_value(&entry.text(), &original) {
+                    values.borrow_mut().insert(key_for_value.clone(), value);
+                }
+            });
+            row.append(&entry);
+        }
+        let remove = gtk::Button::with_label("Remove");
+        let key_for_remove = key.clone();
+        let values = flags.clone();
+        let off = disabled.clone();
+        let table_ref = table.clone();
+        let parent_ref = parent.clone();
+        let status_ref = status.clone();
+        remove.connect_clicked(move |_| {
+            let confirm = gtk::AlertDialog::builder()
+                .message(format!("Remove {key_for_remove}?"))
+                .detail("This flag will be deleted from your saved FastFlags.")
+                .buttons(["Cancel", "Remove"])
+                .cancel_button(0)
+                .default_button(1)
+                .build();
+            let values = values.clone();
+            let off = off.clone();
+            let table = table_ref.clone();
+            let parent = parent_ref.clone();
+            let status = status_ref.clone();
+            let key = key_for_remove.clone();
+            confirm.choose(
+                Some(&parent_ref),
+                None::<&gtk::gio::Cancellable>,
+                move |response| {
+                    if matches!(response, Ok(1)) {
+                        values.borrow_mut().remove(&key);
+                        off.borrow_mut().remove(&key);
+                        status.set_text(&format!(
+                            "Removed {key}. Save FastFlags to apply the change."
+                        ));
+                        render_fast_flag_rows(
+                            &table,
+                            values.clone(),
+                            off.clone(),
+                            parent.clone(),
+                            status.clone(),
+                        );
+                    }
+                },
+            );
+        });
+        row.append(&remove);
+        table.append(&row);
+    }
+}
+
+fn import_fast_flags(
+    incoming: serde_json::Map<String, serde_json::Value>,
+    flags: Rc<RefCell<BTreeMap<String, serde_json::Value>>>,
+    disabled: Rc<RefCell<HashSet<String>>>,
+    table: gtk::Box,
+    parent: gtk::Window,
+    status: gtk::Label,
+) {
+    let conflicts = incoming
+        .iter()
+        .filter_map(|(key, imported)| {
+            flags
+                .borrow()
+                .get(key)
+                .filter(|current| *current != imported)
+                .map(|_| key.clone())
+        })
+        .collect::<Vec<_>>();
+    let merge = {
+        let flags = flags.clone();
+        let disabled = disabled.clone();
+        let parent = parent.clone();
+        let table = table.clone();
+        let status = status.clone();
+        move |override_conflicts: bool| {
+            for (key, value) in &incoming {
+                if override_conflicts || !flags.borrow().contains_key(key) {
+                    flags.borrow_mut().insert(key.clone(), value.clone());
+                    disabled.borrow_mut().remove(key);
+                }
+            }
+            render_fast_flag_rows(
+                &table,
+                flags.clone(),
+                disabled.clone(),
+                parent.clone(),
+                status.clone(),
+            );
+            status.set_text(
+                "Imported flags. Review the list, then save to apply them on the next launch.",
+            );
+        }
+    };
+    if conflicts.is_empty() {
+        merge(true);
+        return;
+    }
+    let dialog = gtk::AlertDialog::builder()
+        .message(format!(
+            "{} flag(s) conflict with your current values",
+            conflicts.len()
+        ))
+        .detail(conflicts.join(", "))
+        .buttons(["Cancel", "Keep current", "Override conflicts"])
+        .cancel_button(0)
+        .default_button(2)
+        .build();
+    dialog.choose(
+        Some(&parent),
+        None::<&gtk::gio::Cancellable>,
+        move |response| match response {
+            Ok(1) => merge(false),
+            Ok(2) => merge(true),
+            _ => {}
+        },
+    );
+}
+
 pub(crate) fn xml_frame_cap() -> Option<u32> {
     let contents = std::fs::read_to_string(game_settings_path()).ok()?;
     parse_game_values(&contents)
@@ -239,6 +613,19 @@ pub(crate) fn configured_frame_cap(settings: &Settings) -> Option<u32> {
 }
 
 pub(crate) fn run_ui() -> Result<bool, String> {
+    let startup_settings = load();
+    // GTK reads the renderer variable before initialization. Cairo is the
+    // software fallback; GL is GTK's accelerated renderer.
+    unsafe {
+        std::env::set_var(
+            "GSK_RENDERER",
+            if startup_settings.hardware_acceleration {
+                "gl"
+            } else {
+                "cairo"
+            },
+        );
+    }
     let app = gtk::Application::builder()
         .application_id("org.rustyblox.Settings")
         .build();
@@ -250,13 +637,25 @@ pub(crate) fn run_ui() -> Result<bool, String> {
         let window = gtk::ApplicationWindow::builder()
             .application(app)
             .title("rusty-blox")
-            .default_width(960)
-            .default_height(720)
+            .default_width(1100)
+            .default_height(760)
             .build();
         let css = gtk::CssProvider::new();
-        css.load_from_data(
-            "window { background: #11151d; color: #eff3fa; } .launcher-header { padding: 20px 24px; background: #191f2b; border-bottom: 1px solid #2b3444; } .launcher-title { font-size: 24px; font-weight: 700; } .launcher-subtitle { color: #a6b1c2; } .launcher-footer { padding: 14px 20px; background: #191f2b; border-top: 1px solid #2b3444; } .launcher-page-title { font-size: 20px; font-weight: 650; } .launcher-hero { padding: 28px; background: linear-gradient(135deg, #1c2b40, #18202c); border: 1px solid #35465f; border-radius: 18px; } .launcher-status { padding: 16px; background: #191f2b; border: 1px solid #2b3444; border-radius: 12px; } .launcher-stat { padding: 14px; background: #191f2b; border: 1px solid #2b3444; border-radius: 12px; }",
-        );
+        css.load_from_data(&theme_css(
+            &settings.theme_mode,
+            &settings.theme_preset,
+            &settings.theme_accent,
+        ));
+        let system_dark_preference = gtk::Settings::default()
+            .map(|gtk_settings| {
+                gtk_settings.find_property("gtk-interface-color-scheme").is_none()
+                    && gtk_settings.property::<bool>("gtk-application-prefer-dark-theme")
+            })
+            .unwrap_or(false);
+        if let Some(gtk_settings) = gtk::Settings::default() {
+            set_interface_color_scheme(&gtk_settings, &settings.theme_mode, system_dark_preference);
+            gtk_settings.set_property("gtk-enable-animations", settings.animations);
+        }
         if let Some(display) = gtk::gdk::Display::default() {
             gtk::style_context_add_provider_for_display(
                 &display,
@@ -265,10 +664,11 @@ pub(crate) fn run_ui() -> Result<bool, String> {
             );
         }
         let root = gtk::Box::new(gtk::Orientation::Vertical, 12);
-        root.set_margin_top(20);
-        root.set_margin_bottom(20);
-        root.set_margin_start(20);
-        root.set_margin_end(20);
+        root.add_css_class("launcher-shell");
+        root.set_margin_top(14);
+        root.set_margin_bottom(14);
+        root.set_margin_start(14);
+        root.set_margin_end(14);
         let header = gtk::Box::new(gtk::Orientation::Vertical, 4);
         header.add_css_class("launcher-header");
         let title = gtk::Label::new(Some("rusty-blox"));
@@ -285,9 +685,11 @@ pub(crate) fn run_ui() -> Result<bool, String> {
         stack.set_hexpand(true);
         stack.set_vexpand(true);
         let sidebar = gtk::StackSidebar::new();
+        sidebar.add_css_class("launcher-sidebar");
         sidebar.set_stack(&stack);
         sidebar.set_size_request(150, -1);
         let content = gtk::Box::new(gtk::Orientation::Horizontal, 16);
+        content.add_css_class("launcher-content");
         content.set_vexpand(true);
         content.append(&sidebar);
         content.append(&stack);
@@ -297,6 +699,10 @@ pub(crate) fn run_ui() -> Result<bool, String> {
         home_page.set_margin_end(8);
         let hero = gtk::Box::new(gtk::Orientation::Vertical, 12);
         hero.add_css_class("launcher-hero");
+        let hero_eyebrow = gtk::Label::new(Some("PLAYER DASHBOARD"));
+        hero_eyebrow.add_css_class("launcher-eyebrow");
+        hero_eyebrow.set_halign(gtk::Align::Start);
+        hero.append(&hero_eyebrow);
         let hero_title = gtk::Label::new(Some("Your Roblox, ready to launch."));
         hero_title.add_css_class("launcher-title");
         hero_title.set_halign(gtk::Align::Start);
@@ -415,9 +821,10 @@ pub(crate) fn run_ui() -> Result<bool, String> {
             stat.add_css_class("launcher-stat");
             stat.set_hexpand(true);
             let title_label = gtk::Label::new(Some(title));
-            title_label.add_css_class("launcher-subtitle");
+            title_label.add_css_class("launcher-stat-title");
             title_label.set_halign(gtk::Align::Start);
             let value_label = gtk::Label::new(Some(value));
+            value_label.add_css_class("launcher-stat-value");
             value_label.set_halign(gtk::Align::Start);
             stat.append(&title_label);
             stat.append(&value_label);
@@ -426,13 +833,99 @@ pub(crate) fn run_ui() -> Result<bool, String> {
         home_page.append(&quick_stats);
         stack.add_titled(&home_page, Some("home"), "Home");
 
+        let appearance_page = gtk::Box::new(gtk::Orientation::Vertical, 14);
+        appearance_page.add_css_class("launcher-page");
+        appearance_page.set_margin_start(10);
+        appearance_page.set_margin_end(10);
+        let appearance_heading = gtk::Label::new(Some("Appearance and effects"));
+        appearance_heading.add_css_class("launcher-page-title");
+        appearance_heading.set_halign(gtk::Align::Start);
+        appearance_page.append(&appearance_heading);
+        let appearance_copy = gtk::Label::new(Some("Choose a color scheme, mix accent colors, and tune the launcher's visual effects. System mode follows your desktop palette."));
+        appearance_copy.add_css_class("launcher-page-copy");
+        appearance_copy.set_halign(gtk::Align::Start);
+        appearance_page.append(&appearance_copy);
+        let appearance_card = gtk::Box::new(gtk::Orientation::Vertical, 14);
+        appearance_card.add_css_class("launcher-card");
+        let theme_mode = choice_dropdown(THEME_MODES, &settings.theme_mode);
+        appearance_card.append(&labeled("Color scheme", &theme_mode));
+        let theme_preset = choice_dropdown(THEME_PRESETS, &settings.theme_preset);
+        appearance_card.append(&labeled("Theme preset", &theme_preset));
+        let theme_accent = choice_dropdown(THEME_ACCENTS, &settings.theme_accent);
+        appearance_card.append(&labeled("Accent color", &theme_accent));
+        let animations = gtk::CheckButton::with_label("Enable interface animations");
+        animations.set_active(settings.animations);
+        appearance_card.append(&animations);
+        let hardware_acceleration = gtk::CheckButton::with_label("Use hardware acceleration for the launcher UI");
+        hardware_acceleration.set_active(settings.hardware_acceleration);
+        appearance_card.append(&hardware_acceleration);
+        appearance_page.append(&appearance_card);
+        let appearance_note = gtk::Label::new(Some("Theme colors and animations update immediately. The renderer setting applies after restarting rusty-blox."));
+        appearance_note.set_wrap(true);
+        appearance_note.set_halign(gtk::Align::Start);
+        appearance_page.append(&appearance_note);
+        let appearance_status = gtk::Label::new(None);
+        appearance_status.set_halign(gtk::Align::Start);
+        appearance_page.append(&appearance_status);
+        let appearance_save = gtk::Button::with_label("Save appearance");
+        let theme_mode_live = theme_mode.clone();
+        let theme_preset_live = theme_preset.clone();
+        let theme_accent_live = theme_accent.clone();
+        let css_live = css.clone();
+        let animations_live = animations.clone();
+        let system_dark_preference_live = system_dark_preference;
+        let update_theme: Rc<dyn Fn()> = Rc::new(move || {
+            let mode = selected_choice_id(&theme_mode_live, THEME_MODES).unwrap_or("dark");
+            let preset = selected_choice_id(&theme_preset_live, THEME_PRESETS).unwrap_or("default");
+            let accent = selected_choice_id(&theme_accent_live, THEME_ACCENTS).unwrap_or("preset");
+            css_live.load_from_data(&theme_css(mode, preset, accent));
+            if let Some(gtk_settings) = gtk::Settings::default() {
+                set_interface_color_scheme(&gtk_settings, mode, system_dark_preference_live);
+                gtk_settings.set_property("gtk-enable-animations", animations_live.is_active());
+            }
+        });
+        let theme_mode_update = update_theme.clone();
+        theme_mode.connect_selected_notify(move |_| theme_mode_update());
+        let theme_preset_update = update_theme.clone();
+        theme_preset.connect_selected_notify(move |_| theme_preset_update());
+        let theme_accent_update = update_theme.clone();
+        theme_accent.connect_selected_notify(move |_| theme_accent_update());
+        animations.connect_toggled(move |_| update_theme());
+        let mode_for_save = theme_mode.clone();
+        let preset_for_save = theme_preset.clone();
+        let accent_for_save = theme_accent.clone();
+        let animations_for_save = animations.clone();
+        let acceleration_for_save = hardware_acceleration.clone();
+        let appearance_status_for_save = appearance_status.clone();
+        appearance_save.connect_clicked(move |_| {
+            let mut value = load();
+            value.theme_mode = selected_choice_id(&mode_for_save, THEME_MODES).unwrap_or("dark").to_owned();
+            value.theme_preset = selected_choice_id(&preset_for_save, THEME_PRESETS).unwrap_or("default").to_owned();
+            value.theme_accent = selected_choice_id(&accent_for_save, THEME_ACCENTS).unwrap_or("preset").to_owned();
+            value.animations = animations_for_save.is_active();
+            value.hardware_acceleration = acceleration_for_save.is_active();
+            match save(&value) {
+                Ok(()) => appearance_status_for_save.set_text("Appearance saved."),
+                Err(error) => appearance_status_for_save.set_text(&error),
+            }
+        });
+        appearance_save.set_halign(gtk::Align::Start);
+        appearance_page.append(&appearance_save);
+        stack.add_titled(&appearance_page, Some("appearance"), "Appearance");
+
         let settings_page = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        settings_page.add_css_class("launcher-page");
         let heading = gtk::Label::new(Some("Performance and client settings"));
         heading.add_css_class("launcher-page-title");
         heading.set_halign(gtk::Align::Start);
         settings_page.append(&heading);
+        let settings_copy = gtk::Label::new(Some("Runtime, graphics, logging, and account preferences."));
+        settings_copy.add_css_class("launcher-page-copy");
+        settings_copy.set_halign(gtk::Align::Start);
+        settings_page.append(&settings_copy);
 
         let logs_box = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        logs_box.add_css_class("launcher-card");
         let logs_heading = gtk::Label::new(Some("Log categories"));
         logs_heading.add_css_class("heading");
         logs_heading.set_halign(gtk::Align::Start);
@@ -569,6 +1062,9 @@ pub(crate) fn run_ui() -> Result<bool, String> {
         let session_model = gtk::StringList::new(&label_refs);
         let session_picker =
             gtk::DropDown::new(Some(session_model.clone()), None::<gtk::Expression>);
+        let disabled_fast_flags = Rc::new(RefCell::new(
+            settings.disabled_fast_flags.iter().cloned().collect::<HashSet<_>>(),
+        ));
         let session_names = Rc::new(RefCell::new(
             labels.into_iter().skip(1).collect::<Vec<String>>(),
         ));
@@ -585,6 +1081,12 @@ pub(crate) fn run_ui() -> Result<bool, String> {
         let save_button = gtk::Button::with_label("Save settings");
         let window_ref = window.clone();
         let fps_for_save = fps.clone();
+        let disabled_for_save = disabled_fast_flags.clone();
+        let mode_for_settings = theme_mode.clone();
+        let preset_for_settings = theme_preset.clone();
+        let accent_for_settings = theme_accent.clone();
+        let animations_for_settings = animations.clone();
+        let acceleration_for_settings = hardware_acceleration.clone();
         save_button.connect_clicked(move |_| {
             let limit = fps_for_save.value_as_int().max(0) as u32;
             let value = Settings {
@@ -615,6 +1117,12 @@ pub(crate) fn run_ui() -> Result<bool, String> {
                     .map(|(id, _)| id.clone())
                     .collect(),
                 wasd_last_pressed: wasd_last_pressed.is_active(),
+                disabled_fast_flags: disabled_for_save.borrow().iter().cloned().collect(),
+                theme_mode: selected_choice_id(&mode_for_settings, THEME_MODES).unwrap_or("dark").to_owned(),
+                theme_preset: selected_choice_id(&preset_for_settings, THEME_PRESETS).unwrap_or("default").to_owned(),
+                theme_accent: selected_choice_id(&accent_for_settings, THEME_ACCENTS).unwrap_or("preset").to_owned(),
+                animations: animations_for_settings.is_active(),
+                hardware_acceleration: acceleration_for_settings.is_active(),
             };
             let settings_error = save(&value).err();
             let mut errors = sync_frame_cap_fallbacks(limit);
@@ -629,25 +1137,45 @@ pub(crate) fn run_ui() -> Result<bool, String> {
         });
 
         let fast_flags_page = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        fast_flags_page.set_margin_start(10);
+        fast_flags_page.set_margin_end(10);
+        fast_flags_page.add_css_class("launcher-page");
         let fast_flags_heading = gtk::Label::new(Some("FastFlags"));
         fast_flags_heading.add_css_class("launcher-page-title");
         fast_flags_heading.set_halign(gtk::Align::Start);
         fast_flags_page.append(&fast_flags_heading);
+        let fast_flags_copy = gtk::Label::new(Some("Choose which client flags are active, or import a JSON collection."));
+        fast_flags_copy.add_css_class("launcher-page-copy");
+        fast_flags_copy.set_halign(gtk::Align::Start);
+        fast_flags_page.append(&fast_flags_copy);
         let fast_flags_path = fast_flags_path();
-        let fast_flags_text = std::fs::read_to_string(&fast_flags_path)
-            .unwrap_or_else(|_| "{}\n".to_owned());
-        let fast_flags_editor = gtk::TextView::new();
-        fast_flags_editor.set_monospace(true);
-        fast_flags_editor.set_wrap_mode(gtk::WrapMode::None);
-        fast_flags_editor.buffer().set_text(&fast_flags_text);
+        let mut initial_flags = std::fs::read(&fast_flags_path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+            .and_then(|value| value.as_object().cloned())
+            .unwrap_or_default();
+        let fast_flags = Rc::new(RefCell::new(
+            std::mem::take(&mut initial_flags).into_iter().collect::<BTreeMap<_, _>>(),
+        ));
+        let fast_flags_toolbar = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        let fast_flags_timing = gtk::Label::new(Some("NEXT LAUNCH"));
+        fast_flags_timing.add_css_class("launcher-pill");
+        fast_flags_timing.set_hexpand(true);
+        fast_flags_timing.set_halign(gtk::Align::Start);
+        fast_flags_toolbar.append(&fast_flags_timing);
+        let fast_flags_import = gtk::Button::with_label("Import JSON");
+        fast_flags_toolbar.append(&fast_flags_import);
+        fast_flags_page.append(&fast_flags_toolbar);
+        let fast_flags_table = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        fast_flags_table.add_css_class("launcher-card");
         let fast_flags_scroll = gtk::ScrolledWindow::builder()
             .vexpand(true)
             .hexpand(true)
-            .child(&fast_flags_editor)
+            .child(&fast_flags_table)
             .build();
         fast_flags_page.append(&fast_flags_scroll);
         let fast_flags_path_note = gtk::Label::new(Some(&format!(
-            "Saved to {}. These flags are used on the next launch.",
+            "Saved to {}. Disabled numerical and string flags are kept here and omitted at launch; boolean values are applied as shown.",
             fast_flags_path.display()
         )));
         fast_flags_path_note.set_wrap(true);
@@ -657,43 +1185,138 @@ pub(crate) fn run_ui() -> Result<bool, String> {
         fast_flags_status.set_halign(gtk::Align::Start);
         fast_flags_page.append(&fast_flags_status);
         let fast_flags_save = gtk::Button::with_label("Save FastFlags");
-        let fast_flags_buffer = fast_flags_editor.buffer();
-        let fast_flags_status_ref = fast_flags_status.clone();
+        fast_flags_save.add_css_class("suggested-action");
+        fast_flags_save.set_halign(gtk::Align::Start);
+        fast_flags_page.append(&fast_flags_save);
+        render_fast_flag_rows(
+            &fast_flags_table,
+            fast_flags.clone(),
+            disabled_fast_flags.clone(),
+            window.clone().upcast(),
+            fast_flags_status.clone(),
+        );
+
+        let import_parent: gtk::Window = window.clone().upcast();
+        let import_table = fast_flags_table.clone();
+        let import_values = fast_flags.clone();
+        let import_disabled = disabled_fast_flags.clone();
+        let import_status = fast_flags_status.clone();
+        fast_flags_import.connect_clicked(move |_| {
+            let dialog = gtk::Window::builder()
+                .title("Import FastFlags JSON")
+                .transient_for(&import_parent)
+                .modal(true)
+                .default_width(620)
+                .default_height(440)
+                .build();
+            let content = gtk::Box::new(gtk::Orientation::Vertical, 10);
+            content.set_margin_top(12);
+            content.set_margin_bottom(12);
+            content.set_margin_start(12);
+            content.set_margin_end(12);
+            let hint = gtk::Label::new(Some("Paste a JSON object of FastFlags. Existing keys will be checked for conflicts."));
+            hint.set_halign(gtk::Align::Start);
+            content.append(&hint);
+            let editor = gtk::TextView::new();
+            editor.set_monospace(true);
+            editor.set_wrap_mode(gtk::WrapMode::None);
+            editor.buffer().set_text("{}\n");
+            let scroll = gtk::ScrolledWindow::builder()
+                .vexpand(true)
+                .hexpand(true)
+                .child(&editor)
+                .build();
+            content.append(&scroll);
+            let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+            actions.set_halign(gtk::Align::End);
+            let cancel = gtk::Button::with_label("Cancel");
+            let import = gtk::Button::with_label("Import");
+            import.add_css_class("suggested-action");
+            actions.append(&cancel);
+            actions.append(&import);
+            content.append(&actions);
+            dialog.set_child(Some(&content));
+            let close_dialog = dialog.clone();
+            cancel.connect_clicked(move |_| close_dialog.close());
+            let values = import_values.clone();
+            let disabled = import_disabled.clone();
+            let table = import_table.clone();
+            let parent = import_parent.clone();
+            let status = import_status.clone();
+            let buffer = editor.buffer();
+            let close_dialog = dialog.clone();
+            import.connect_clicked(move |_| {
+                let (start, end) = buffer.bounds();
+                let text = buffer.text(&start, &end, true).to_string();
+                match serde_json::from_str::<serde_json::Value>(&text) {
+                    Ok(value) if value.is_object() => {
+                        import_fast_flags(
+                            value.as_object().unwrap().clone(),
+                            values.clone(),
+                            disabled.clone(),
+                            table.clone(),
+                            parent.clone(),
+                            status.clone(),
+                        );
+                        close_dialog.close();
+                    }
+                    Ok(_) => status.set_text("FastFlags import must be a JSON object."),
+                    Err(error) => status.set_text(&format!("Invalid JSON: {error}")),
+                }
+            });
+            dialog.present();
+        });
+
+        let flags_for_save = fast_flags.clone();
+        let disabled_for_flags = disabled_fast_flags.clone();
+        let flags_status_ref = fast_flags_status.clone();
+        let flags_path_for_save = fast_flags_path.clone();
         let fast_flags_fps = fps.clone();
         fast_flags_save.connect_clicked(move |_| {
-            let (start, end) = fast_flags_buffer.bounds();
-            let text = fast_flags_buffer.text(&start, &end, true).to_string();
-            let parsed = serde_json::from_str::<serde_json::Value>(&text);
-            match parsed {
-                Ok(mut value) if value.is_object() => {
-                    let limit = fast_flags_fps.value_as_int().max(0) as u32;
-                    let Some(flags) = value.as_object_mut() else { unreachable!() };
-                    if limit == 0 {
-                        flags.remove("DFIntTaskSchedulerTargetFps");
-                        flags.remove("FFlagTaskSchedulerLimitTargetFpsTo2402");
+            let mut flags = flags_for_save.borrow_mut();
+            if !disabled_for_flags
+                .borrow()
+                .contains("DFIntTaskSchedulerTargetFps")
+            {
+                let limit = fast_flags_fps.value_as_int().max(0) as u32;
+                if limit == 0 {
+                    flags.remove("DFIntTaskSchedulerTargetFps");
+                    flags.remove("FFlagTaskSchedulerLimitTargetFpsTo2402");
+                } else {
+                    flags.insert("DFIntTaskSchedulerTargetFps".into(), limit.to_string().into());
+                    if limit > 240 {
+                        flags.insert("FFlagTaskSchedulerLimitTargetFpsTo2402".into(), false.into());
                     } else {
-                        flags.insert("DFIntTaskSchedulerTargetFps".into(), limit.to_string().into());
-                        if limit > 240 { flags.insert("FFlagTaskSchedulerLimitTargetFpsTo2402".into(), "False".into()); }
-                        else { flags.remove("FFlagTaskSchedulerLimitTargetFpsTo2402"); }
-                    }
-                    match serde_json::to_vec_pretty(&value) {
-                        Ok(bytes) => match write_file(&fast_flags_path, &bytes) {
-                            Ok(()) => fast_flags_status_ref.set_text("Saved. Flags apply on the next launch."),
-                            Err(error) => fast_flags_status_ref.set_text(&error),
-                        },
-                        Err(error) => fast_flags_status_ref.set_text(&error.to_string()),
+                        flags.remove("FFlagTaskSchedulerLimitTargetFpsTo2402");
                     }
                 }
-                Ok(_) => fast_flags_status_ref.set_text("FastFlags must be a JSON object."),
-                Err(error) => fast_flags_status_ref.set_text(&format!("Invalid JSON: {error}")),
+            }
+            match serde_json::to_vec_pretty(&serde_json::Value::Object(flags.clone().into_iter().collect())) {
+                Ok(bytes) => match write_file(&flags_path_for_save, &bytes) {
+                    Ok(()) => {
+                        let mut app_settings = load();
+                        app_settings.disabled_fast_flags = disabled_for_flags.borrow().iter().cloned().collect();
+                        match save(&app_settings) {
+                            Ok(()) => flags_status_ref.set_text("Saved. Flags apply on the next launch."),
+                            Err(error) => flags_status_ref.set_text(&format!("FastFlags saved, but disabled flag settings could not be saved: {error}")),
+                        }
+                    }
+                    Err(error) => flags_status_ref.set_text(&error),
+                },
+                Err(error) => flags_status_ref.set_text(&error.to_string()),
             }
         });
 
         let game_settings_page = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        game_settings_page.add_css_class("launcher-page");
         let game_heading = gtk::Label::new(Some("Game settings"));
         game_heading.add_css_class("launcher-page-title");
         game_heading.set_halign(gtk::Align::Start);
         game_settings_page.append(&game_heading);
+        let game_copy = gtk::Label::new(Some("Adjust in-game preferences stored in Roblox's local settings."));
+        game_copy.add_css_class("launcher-page-copy");
+        game_copy.set_halign(gtk::Align::Start);
+        game_settings_page.append(&game_copy);
         let game_path = game_settings_path();
         let (game_values, game_load_message) = match std::fs::read_to_string(&game_path) {
             Ok(contents) => match parse_game_values(&contents) {
@@ -821,10 +1444,15 @@ pub(crate) fn run_ui() -> Result<bool, String> {
         });
 
         let session_page = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        session_page.add_css_class("launcher-page");
         let session_heading = gtk::Label::new(Some("Roblox sessions"));
         session_heading.add_css_class("launcher-page-title");
         session_heading.set_halign(gtk::Align::Start);
         session_page.append(&session_heading);
+        let session_copy = gtk::Label::new(Some("Keep separate sign-ins for the accounts you use."));
+        session_copy.add_css_class("launcher-page-copy");
+        session_copy.set_halign(gtk::Align::Start);
+        session_page.append(&session_copy);
         session_page.append(&labeled("Use this session on the next launch", &session_picker));
         let set_default = gtk::Button::with_label("Set as default session");
         let picker_for_default = session_picker.clone();
@@ -895,10 +1523,7 @@ pub(crate) fn run_ui() -> Result<bool, String> {
         stack.add_titled(&game_settings_page, Some("game"), "Game");
         stack.add_titled(&session_page, Some("sessions"), "Sessions");
         let footer = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-        footer.set_margin_top(12);
-        footer.set_margin_bottom(12);
-        footer.set_margin_start(20);
-        footer.set_margin_end(20);
+        footer.set_margin_top(2);
         let play_status = gtk::Label::new(Some("Your changes are saved before Roblox starts."));
         play_status.set_halign(gtk::Align::Start);
         play_status.set_hexpand(true);
@@ -1031,21 +1656,27 @@ fn sync_frame_cap_fallbacks(limit: u32) -> Vec<String> {
             let Some(flags) = flags.as_object_mut() else {
                 unreachable!("object was checked above")
             };
-            if limit == 0 {
-                flags.remove("DFIntTaskSchedulerTargetFps");
-                flags.remove("FFlagTaskSchedulerLimitTargetFpsTo2402");
-            } else {
-                flags.insert(
-                    "DFIntTaskSchedulerTargetFps".to_owned(),
-                    limit.to_string().into(),
-                );
-                if limit > 240 {
-                    flags.insert(
-                        "FFlagTaskSchedulerLimitTargetFpsTo2402".to_owned(),
-                        "False".into(),
-                    );
-                } else {
+            let fps_flag_disabled = load()
+                .disabled_fast_flags
+                .iter()
+                .any(|key| key == "DFIntTaskSchedulerTargetFps");
+            if !fps_flag_disabled {
+                if limit == 0 {
+                    flags.remove("DFIntTaskSchedulerTargetFps");
                     flags.remove("FFlagTaskSchedulerLimitTargetFpsTo2402");
+                } else {
+                    flags.insert(
+                        "DFIntTaskSchedulerTargetFps".to_owned(),
+                        limit.to_string().into(),
+                    );
+                    if limit > 240 {
+                        flags.insert(
+                            "FFlagTaskSchedulerLimitTargetFpsTo2402".to_owned(),
+                            "False".into(),
+                        );
+                    } else {
+                        flags.remove("FFlagTaskSchedulerLimitTargetFpsTo2402");
+                    }
                 }
             }
             match serde_json::to_vec_pretty(&flags) {

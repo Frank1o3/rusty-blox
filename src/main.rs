@@ -139,25 +139,44 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let mut fast_flags: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&fast_flags_path)?)?;
-    if let Some(limit) = settings::configured_frame_cap(&user_settings) {
-        let flags = fast_flags
-            .as_object_mut()
-            .ok_or("Fast Flags document must be a JSON object")?;
-        if limit == 0 {
-            flags.remove("DFIntTaskSchedulerTargetFps");
-            flags.remove("FFlagTaskSchedulerLimitTargetFpsTo2402");
-        } else {
-            flags.insert(
-                "DFIntTaskSchedulerTargetFps".to_owned(),
-                limit.to_string().into(),
-            );
-            if limit > 240 {
-                flags.insert(
-                    "FFlagTaskSchedulerLimitTargetFpsTo2402".to_owned(),
-                    "False".into(),
-                );
-            } else {
+    if let Some(flags) = fast_flags.as_object_mut() {
+        for key in &user_settings.disabled_fast_flags {
+            match flags.get(key) {
+                Some(serde_json::Value::Bool(_)) => {
+                    flags.insert(key.clone(), false.into());
+                }
+                Some(_) => {
+                    flags.remove(key);
+                }
+                None => {}
+            }
+        }
+    }
+    if !user_settings
+        .disabled_fast_flags
+        .iter()
+        .any(|key| key == "DFIntTaskSchedulerTargetFps")
+    {
+        if let Some(limit) = settings::configured_frame_cap(&user_settings) {
+            let flags = fast_flags
+                .as_object_mut()
+                .ok_or("Fast Flags document must be a JSON object")?;
+            if limit == 0 {
+                flags.remove("DFIntTaskSchedulerTargetFps");
                 flags.remove("FFlagTaskSchedulerLimitTargetFpsTo2402");
+            } else {
+                flags.insert(
+                    "DFIntTaskSchedulerTargetFps".to_owned(),
+                    limit.to_string().into(),
+                );
+                if limit > 240 {
+                    flags.insert(
+                        "FFlagTaskSchedulerLimitTargetFpsTo2402".to_owned(),
+                        "False".into(),
+                    );
+                } else {
+                    flags.remove("FFlagTaskSchedulerLimitTargetFpsTo2402");
+                }
             }
         }
     }

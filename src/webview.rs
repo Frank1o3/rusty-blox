@@ -315,6 +315,7 @@ fn is_allowed_host(host: &str) -> bool {
         "arkoselabs.com",
         "funcaptcha.com",
         "recaptcha.net",
+        "js.stripe.com",
     ];
     allowed_suffixes
         .iter()
