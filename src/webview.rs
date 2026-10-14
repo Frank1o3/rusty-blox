@@ -20,6 +20,7 @@ pub(crate) struct WebViewHost {
     window: gtk4::Window,
     view: webkit6::WebView,
     load_state: Rc<RefCell<LoadState>>,
+    _content_manager: webkit6::UserContentManager,
     _popup_windows: Rc<RefCell<Vec<gtk4::Window>>>,
 }
 
@@ -28,8 +29,18 @@ impl WebViewHost {
         gtk4::init().map_err(|error| format!("initialize GTK for Roblox web view: {error}"))?;
 
         let network_session = webkit6::NetworkSession::new_ephemeral();
+        let content_manager = webkit6::UserContentManager::new();
+        let join_shim = webkit6::UserScript::new(
+            ROBLOX_SERVER_JOIN_SHIM,
+            webkit6::UserContentInjectedFrames::TopFrame,
+            webkit6::UserScriptInjectionTime::Start,
+            &[],
+            &[],
+        );
+        content_manager.add_script(&join_shim);
         let view = webkit6::WebView::builder()
             .network_session(&network_session)
+            .user_content_manager(&content_manager)
             .hexpand(true)
             .vexpand(true)
             .build();
@@ -112,6 +123,7 @@ impl WebViewHost {
             window,
             view,
             load_state,
+            _content_manager: content_manager,
             _popup_windows: popup_windows,
         })
     }
@@ -151,7 +163,7 @@ impl WebViewHost {
 }
 
 fn install_navigation_policy(view: &webkit6::WebView) {
-    view.connect_decide_policy(|_, decision, kind| {
+    view.connect_decide_policy(|view, decision, kind| {
         if kind != webkit6::PolicyDecisionType::NavigationAction
             && kind != webkit6::PolicyDecisionType::NewWindowAction
         {
@@ -166,6 +178,20 @@ fn install_navigation_policy(view: &webkit6::WebView) {
             .and_then(|request| request.uri())
             .map(|uri| uri.to_string())
             .unwrap_or_default();
+        let current_host = view
+            .uri()
+            .map(|uri| uri.to_string())
+            .and_then(|uri| uri_host(&uri));
+        if (uri.starts_with("roblox://experiences/start?")
+            || uri
+                .get(.."roblox-player:".len())
+                .is_some_and(|scheme| scheme.eq_ignore_ascii_case("roblox-player:")))
+            && current_host.as_deref().is_some_and(is_roblox_host)
+        {
+            roblox_runtime::webview::request_join(uri);
+            decision.ignore();
+            return true;
+        }
         // WebKit may request a target=_blank/window.open page before the page
         // assigns its URL. Let that empty popup be created; its later
         // navigation is checked by this same policy on the child WebView.
@@ -186,6 +212,45 @@ fn install_navigation_policy(view: &webkit6::WebView) {
     });
 }
 
+// The Roblox website's Servers tab calls this page-side function when Join is
+// clicked. In our standalone WebKit view there is no Android intent handler,
+// so pass the selected place and server ID back through a custom scheme. The
+// runtime validates the values again before publishing the link to the client.
+const ROBLOX_SERVER_JOIN_SHIM: &str = r#"(() => {
+  const install = () => {
+    try {
+      const game = window.Roblox && window.Roblox.Hybrid && window.Roblox.Hybrid.Game;
+      if (!game || typeof game.launchGame !== 'function' || game.launchGame.__rustyBloxJoin) return false;
+      const original = game.launchGame;
+      const wrapped = function(payload, ...rest) {
+        try {
+          const data = typeof payload === 'string' ? JSON.parse(payload) : payload;
+          const placeId = String(data && data.placeId || '');
+          const instanceId = String(data && data.instanceId || '');
+          if (/^[0-9]{1,20}$/.test(placeId)) {
+            let url = 'roblox://experiences/start?placeId=' + placeId;
+            if (/^[0-9a-fA-F-]{1,64}$/.test(instanceId)) {
+              url += '&gameInstanceId=' + instanceId;
+            }
+            window.location.href = url;
+            return;
+          }
+        } catch (_) {}
+        return original.apply(this, [payload, ...rest]);
+      };
+      wrapped.__rustyBloxJoin = true;
+      game.launchGame = wrapped;
+      return true;
+    } catch (_) { return false; }
+  };
+  if (!install()) {
+    let attempts = 0;
+    const timer = setInterval(() => {
+      if (install() || ++attempts >= 240) clearInterval(timer);
+    }, 50);
+  }
+})();"#;
+
 fn install_load_diagnostics(view: &webkit6::WebView) {
     view.connect_load_changed(|view, event| {
         let uri = view.uri().map(|uri| uri.to_string()).unwrap_or_default();
@@ -204,6 +269,7 @@ fn install_load_diagnostics(view: &webkit6::WebView) {
             .or_else(|| resource.uri().map(|uri| uri.to_string()))
             .unwrap_or_default();
         let host = uri_host(&uri).unwrap_or_else(|| "unknown host".to_owned());
+        let path = uri_path(&uri).unwrap_or_else(|| "/".to_owned());
         resource.connect_failed(move |_, error| {
             // WebKit reports cancellations for replaced requests during
             // redirects and normal page teardown. Keep those out of the
@@ -211,7 +277,7 @@ fn install_load_diagnostics(view: &webkit6::WebView) {
             if error.matches(webkit6::NetworkError::Cancelled) {
                 return;
             }
-            eprintln!("rusty-blox: WebView resource failed ({host}): {error}");
+            eprintln!("rusty-blox: WebView resource failed ({host}{path}): {error}");
         });
     });
     view.connect_web_process_terminated(|_, reason| {
@@ -223,6 +289,12 @@ fn uri_host(uri: &str) -> Option<String> {
     gtk4::glib::Uri::parse(uri, gtk4::glib::UriFlags::NONE)
         .ok()
         .and_then(|uri| uri.host().map(|host| host.to_string()))
+}
+
+fn uri_path(uri: &str) -> Option<String> {
+    gtk4::glib::Uri::parse(uri, gtk4::glib::UriFlags::NONE)
+        .ok()
+        .map(|uri| uri.path().to_string())
 }
 
 fn uri_label(uri: &str) -> String {
@@ -311,6 +383,7 @@ fn is_allowed_host(host: &str) -> bool {
     let host = host.to_ascii_lowercase();
     let allowed_suffixes = [
         "roblox.com",
+        "apis.roblox.com",
         "rbxcdn.com",
         "arkoselabs.com",
         "funcaptcha.com",
@@ -320,6 +393,11 @@ fn is_allowed_host(host: &str) -> bool {
     allowed_suffixes
         .iter()
         .any(|&suffix| host == suffix || host.ends_with(&format!(".{suffix}")))
+}
+
+fn is_roblox_host(host: &str) -> bool {
+    let host = host.to_ascii_lowercase();
+    host == "roblox.com" || host.ends_with(".roblox.com")
 }
 
 fn webview_uri_allowed(uri: &str) -> bool {
@@ -354,7 +432,9 @@ mod tests {
         assert!(webview_uri_allowed("https://roblox.com"));
         assert!(webview_uri_allowed("https://client-telemetry.roblox.com"));
         assert!(webview_uri_allowed("https://t6.rbxcdn.com/test"));
-        assert!(webview_uri_allowed("https://client-api.arkoselabs.com/fc/api"));
+        assert!(webview_uri_allowed(
+            "https://client-api.arkoselabs.com/fc/api"
+        ));
         assert!(webview_uri_allowed("about:blank"));
         assert!(webview_uri_allowed("about:srcdoc"));
 

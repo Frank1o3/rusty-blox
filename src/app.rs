@@ -440,6 +440,28 @@ impl winit::application::ApplicationHandler for ClientApp {
                             );
                         }
                     }
+                    roblox_runtime::webview::WebViewEvent::Join(url) => {
+                        eprintln!(
+                            "rusty-blox: forwarding Roblox WebView server join to the running client"
+                        );
+                        match self.engine.as_ref() {
+                            Some(engine) => {
+                                match roblox_runtime::deeplink::join_from_webview(engine, &url) {
+                                    Ok(()) => {
+                                        if let Some(webview) = &self.webview {
+                                            webview.close();
+                                        }
+                                    }
+                                    Err(error) => eprintln!(
+                                        "rusty-blox: could not join the selected server: {error}"
+                                    ),
+                                }
+                            }
+                            None => eprintln!(
+                                "rusty-blox: cannot join a server before the Roblox engine is ready"
+                            ),
+                        }
+                    }
                 }
             }
         }
