@@ -434,6 +434,7 @@ impl winit::application::ApplicationHandler for ClientApp {
                     roblox_runtime::webview::WebViewEvent::Close => {
                         if let Some(webview) = &self.webview {
                             webview.close();
+                            self.focus_game_window();
                         } else {
                             eprintln!(
                                 "rusty-blox: Roblox closed a web view before the host opened one"
@@ -450,6 +451,7 @@ impl winit::application::ApplicationHandler for ClientApp {
                                     Ok(()) => {
                                         if let Some(webview) = &self.webview {
                                             webview.close();
+                                            self.focus_game_window();
                                         }
                                     }
                                     Err(error) => eprintln!(
@@ -512,6 +514,15 @@ impl winit::application::ApplicationHandler for ClientApp {
 }
 
 impl ClientApp {
+    fn focus_game_window(&self) {
+        if let Some(window) = &self.window {
+            // The Roblox browser is a separate GTK top-level. Hiding it does
+            // not reliably return keyboard focus to the Winit game window on
+            // every desktop compositor.
+            window.focus_window();
+        }
+    }
+
     fn sync_text_overlay(&mut self) {
         let Some(owner) = self.surface_owner.as_mut() else {
             return;
