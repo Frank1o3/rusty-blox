@@ -1725,7 +1725,7 @@ fn slider_xml_keys(key: &str) -> Vec<&'static str> {
 
 #[derive(Clone, Default)]
 struct GameXmlContext {
-    element: Vec<u8>,
+    element: String,
     setting: Option<String>,
     vector: bool,
     component: Option<char>,
@@ -1735,18 +1735,16 @@ fn start_context(
     element: &quick_xml::events::BytesStart<'_>,
     parent: Option<&GameXmlContext>,
 ) -> GameXmlContext {
-    let element_name = element.name().as_ref().to_vec();
+    let element_name = element.name().as_ref().to_owned();
     let setting_attr = element.attributes().flatten().find_map(|attribute| {
-        (attribute.key.as_ref() == b"name")
-            .then(|| String::from_utf8(attribute.value.into_owned()).ok())
-            .flatten()
+        (attribute.key.as_ref() == "name").then(|| attribute.value.into_owned())
     });
     let setting = setting_attr.or_else(|| parent.and_then(|context| context.setting.clone()));
-    let vector = element_name == b"Vector2" && setting.is_some();
+    let vector = element_name == "Vector2" && setting.is_some();
     let component = if parent.is_some_and(|context| context.vector) {
-        match element_name.as_slice() {
-            b"X" => Some('X'),
-            b"Y" => Some('Y'),
+        match element_name.as_str() {
+            "X" => Some('X'),
+            "Y" => Some('Y'),
             _ => None,
         }
     } else {
@@ -1766,8 +1764,8 @@ fn value_key(context: &GameXmlContext) -> Option<String> {
         return Some(format!("{setting}.{component}"));
     }
     matches!(
-        context.element.as_slice(),
-        b"bool" | b"float" | b"int" | b"int64" | b"token" | b"string"
+        context.element.as_str(),
+        "bool" | "float" | "int" | "int64" | "token" | "string"
     )
     .then(|| setting.clone())
 }
@@ -1785,9 +1783,7 @@ fn parse_game_values(contents: &str) -> Result<HashMap<String, String>, String> 
             }
             Ok(quick_xml::events::Event::Text(text)) => {
                 if let Some(context) = contexts.last().and_then(value_key) {
-                    let value = text
-                        .decode()
-                        .map_err(|error| format!("decode game setting value: {error}"))?;
+                    let value = text.xml_content(quick_xml::XmlVersion::Implicit1_0);
                     if !value.trim().is_empty() {
                         values.insert(context, value.trim().to_owned());
                     }
@@ -1870,7 +1866,7 @@ fn validate_xml(contents: &str) -> Result<(), String> {
     }
     let mut reader = quick_xml::Reader::from_str(contents);
     reader.config_mut().trim_text(false);
-    let mut elements: Vec<Vec<u8>> = Vec::new();
+    let mut elements: Vec<String> = Vec::new();
     let mut roots = 0usize;
     loop {
         match reader.read_event() {
@@ -1878,7 +1874,7 @@ fn validate_xml(contents: &str) -> Result<(), String> {
                 if elements.is_empty() {
                     roots += 1;
                 }
-                elements.push(element.name().as_ref().to_vec());
+                elements.push(element.name().as_ref().to_owned());
             }
             Ok(quick_xml::events::Event::Empty(_)) if elements.is_empty() => roots += 1,
             Ok(quick_xml::events::Event::End(element)) => {

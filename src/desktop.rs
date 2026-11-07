@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 pub(crate) struct GameMode {
-    connection: Option<zbus::blocking::Connection>,
+    connection: Option<zbus::Connection>,
     registered: bool,
 }
 
@@ -18,25 +18,27 @@ impl GameMode {
         if !enabled {
             return result;
         }
-        let outcome = (|| -> Result<i32, Box<dyn std::error::Error>> {
-            let conn = zbus::blocking::Connection::session()?;
-            let reply = conn.call_method(
-                Some("com.feralinteractive.GameMode"),
-                "/com/feralinteractive/GameMode",
-                Some("com.feralinteractive.GameMode"),
-                "RegisterGame",
-                &(std::process::id() as i32,),
-            )?;
+        let outcome = zbus::block_on(async {
+            let conn = zbus::Connection::session().await?;
+            let reply = conn
+                .call_method(
+                    Some("com.feralinteractive.GameMode"),
+                    "/com/feralinteractive/GameMode",
+                    Some("com.feralinteractive.GameMode"),
+                    "RegisterGame",
+                    &(std::process::id() as i32,),
+                )
+                .await?;
             let code = reply.body().deserialize::<i32>()?;
-            result.connection = Some(conn);
-            Ok(code)
-        })();
+            Ok::<_, zbus::Error>((conn, code))
+        });
         match outcome {
-            Ok(0) => {
+            Ok((conn, 0)) => {
+                result.connection = Some(conn);
                 result.registered = true;
                 eprintln!("rusty-blox: registered with Feral GameMode");
             }
-            Ok(code) => eprintln!("rusty-blox: GameMode declined registration ({code})"),
+            Ok((_, code)) => eprintln!("rusty-blox: GameMode declined registration ({code})"),
             Err(error) => eprintln!("rusty-blox: GameMode unavailable, continuing: {error}"),
         }
         result
@@ -49,14 +51,19 @@ impl Drop for GameMode {
             return;
         }
         if let Some(conn) = &self.connection {
-            let call = conn.call_method(
-                Some("com.feralinteractive.GameMode"),
-                "/com/feralinteractive/GameMode",
-                Some("com.feralinteractive.GameMode"),
-                "UnregisterGame",
-                &(std::process::id() as i32,),
-            );
-            match call.and_then(|reply| reply.body().deserialize::<i32>().map_err(Into::into)) {
+            let call = zbus::block_on(async {
+                let reply = conn
+                    .call_method(
+                        Some("com.feralinteractive.GameMode"),
+                        "/com/feralinteractive/GameMode",
+                        Some("com.feralinteractive.GameMode"),
+                        "UnregisterGame",
+                        &(std::process::id() as i32,),
+                    )
+                    .await?;
+                reply.body().deserialize::<i32>()
+            });
+            match call {
                 Ok(0) => eprintln!("rusty-blox: unregistered from Feral GameMode"),
                 Ok(code) => eprintln!("rusty-blox: GameMode unregister returned {code}"),
                 Err(error) => eprintln!("rusty-blox: GameMode unregister failed: {error}"),

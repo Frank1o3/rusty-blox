@@ -1066,21 +1066,26 @@ fn configured_start_size(data_dir: &std::path::Path) -> Option<PhysicalSize<u32>
     loop {
         match reader.read_event().ok()? {
             quick_xml::events::Event::Start(element) => {
-                if !in_start_size && element.name().as_ref() == b"Vector2" {
+                if !in_start_size && element.name().as_ref() == "Vector2" {
                     in_start_size = element.attributes().flatten().any(|attribute| {
-                        attribute.key.as_ref() == b"name"
-                            && attribute.value.as_ref() == b"StartScreenSize"
+                        attribute.key.as_ref() == "name"
+                            && attribute.value.as_ref() == "StartScreenSize"
                     });
                 } else if in_start_size {
                     component = match element.name().as_ref() {
-                        b"X" => Some(b'X'),
-                        b"Y" => Some(b'Y'),
+                        "X" => Some(b'X'),
+                        "Y" => Some(b'Y'),
                         _ => None,
                     };
                 }
             }
             quick_xml::events::Event::Text(text) if in_start_size => {
-                if let Some(value) = text.decode().ok()?.trim().parse::<u32>().ok() {
+                if let Some(value) = text
+                    .xml_content(quick_xml::XmlVersion::Implicit1_0)
+                    .trim()
+                    .parse::<u32>()
+                    .ok()
+                {
                     match component {
                         Some(b'X') => width = Some(value),
                         Some(b'Y') => height = Some(value),
@@ -1089,8 +1094,8 @@ fn configured_start_size(data_dir: &std::path::Path) -> Option<PhysicalSize<u32>
                 }
             }
             quick_xml::events::Event::End(element) => match element.name().as_ref() {
-                b"X" | b"Y" => component = None,
-                b"Vector2" if in_start_size => {
+                "X" | "Y" => component = None,
+                "Vector2" if in_start_size => {
                     in_start_size = false;
                     if let (Some(width), Some(height)) = (width, height) {
                         if width > 0 && height > 0 {

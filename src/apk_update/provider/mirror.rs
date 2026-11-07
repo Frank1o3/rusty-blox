@@ -815,7 +815,11 @@ fn held(files: &[PathBuf]) -> (Option<PathBuf>, Option<PathBuf>) {
         if assets.is_none()
             && (0..zip.len()).any(|i| {
                 zip.by_index(i)
-                    .map(|e| e.name().starts_with("assets/"))
+                    .map(|e| {
+                        e.name()
+                            .map(|name| name.starts_with("assets/"))
+                            .unwrap_or(false)
+                    })
                     .unwrap_or(false)
             })
         {
