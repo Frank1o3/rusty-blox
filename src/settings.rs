@@ -1900,7 +1900,7 @@ fn initial_game_settings_xml(updates: &HashMap<String, String>) -> String {
         xml.push_str(&format!("<{tag} name=\"{name}\">{value}</{tag}>"));
     }
     for (name, components) in vectors {
-        if let (Some(x), Some(y)) = components {
+        if let [Some(x), Some(y)] = components {
             xml.push_str(&format!("<Vector2 name=\"{name}\"><X>{x}</X><Y>{y}</Y></Vector2>"));
         }
     }
