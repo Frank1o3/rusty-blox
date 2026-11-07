@@ -182,10 +182,14 @@ pub(crate) struct Settings {
     pub renderer: String,
     pub vsync: bool,
     pub present_mode: String,
+    /// Optional Vulkan frame submission cap; None adds no software cap.
+    pub vulkan_fps_limit: Option<u32>,
     pub gl_swap_interval: String,
     pub rust_jnivm: bool,
     pub jnivm_cpp_fallback: bool,
     pub host_libc: bool,
+    /// Roblox's in-engine frame target. Kept under its existing JSON key for
+    /// compatibility with saved settings from earlier versions.
     pub fps_limit: Option<u32>,
     pub session: Option<String>,
     pub log_categories: Vec<String>,
@@ -207,6 +211,7 @@ impl Default for Settings {
             renderer: "auto".into(),
             vsync: true,
             present_mode: "fifo".into(),
+            vulkan_fps_limit: None,
             gl_swap_interval: "on".into(),
             rust_jnivm: false,
             jnivm_cpp_fallback: true,
@@ -1012,6 +1017,55 @@ pub(crate) fn run_ui() -> Result<bool, String> {
             )
         });
         settings_page.append(&labeled("Vulkan presentation mode", &present));
+        let vulkan_fps =
+            gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.0, 500.0, 10.0);
+        vulkan_fps.set_value(
+            settings
+                .vulkan_fps_limit
+                .map(|limit| limit.clamp(30, 500))
+                .unwrap_or(0) as f64,
+        );
+        vulkan_fps.set_draw_value(true);
+        vulkan_fps.set_digits(0);
+        vulkan_fps.set_hexpand(true);
+        vulkan_fps.set_format_value_func(|_, value| {
+            if value < 1.0 {
+                "No extra cap".to_owned()
+            } else {
+                format!("{value:.0} FPS")
+            }
+        });
+        vulkan_fps.add_mark(30.0, gtk::PositionType::Bottom, Some("30"));
+        vulkan_fps.add_mark(500.0, gtk::PositionType::Bottom, Some("500"));
+        vulkan_fps.connect_value_changed(|scale| {
+            if scale.value() > 0.0 && scale.value() < 30.0 {
+                scale.set_value(30.0);
+            }
+        });
+        let vulkan_fps_ref = vulkan_fps.clone();
+        let renderer_ref = renderer.clone();
+        let present_ref = present.clone();
+        let vsync_ref_for_fps = vsync.clone();
+        let update_vulkan_fps_sensitivity = move || {
+            let selected_mode = selected_choice_id(&present_ref, PRESENT_MODES);
+            vulkan_fps_ref.set_sensitive(
+                selected_choice_id(&renderer_ref, RENDERERS) == Some("vulkan")
+                    && (!vsync_ref_for_fps.is_active()
+                        || matches!(selected_mode, Some("mailbox" | "immediate"))),
+            );
+        };
+        update_vulkan_fps_sensitivity();
+        let update = Rc::new(update_vulkan_fps_sensitivity);
+        let update_vsync = update.clone();
+        renderer.connect_selected_notify(move |_| update_vsync());
+        let update_present = update.clone();
+        present.connect_selected_notify(move |_| update_present());
+        let update_vsync = update.clone();
+        vsync.connect_toggled(move |_| update_vsync());
+        settings_page.append(&labeled(
+            "Vulkan presentation FPS cap (0 = no extra cap)",
+            &vulkan_fps,
+        ));
         let gl_interval = choice_dropdown(GL_SWAP_INTERVALS, &settings.gl_swap_interval);
         gl_interval.set_sensitive(settings.vsync && settings.renderer == "opengl");
         let gl_interval_ref = gl_interval.clone();
@@ -1033,11 +1087,8 @@ pub(crate) fn run_ui() -> Result<bool, String> {
             )
         });
         settings_page.append(&labeled("OpenGL ES swap interval", &gl_interval));
-        let fps = gtk::SpinButton::with_range(0.0, 360.0, 1.0);
-        fps.set_value(initial_frame_cap as f64);
-        settings_page.append(&labeled("FPS limit (0 = unlimited; shared with Game settings)", &fps));
         let note = gtk::Label::new(Some(
-            "OpenGL ES uses the selected EGL swap interval. Adaptive mode uses interval -1 and depends on driver support.",
+            "The game FPS target is independent. The Vulkan cap paces frame submissions in Mailbox or Immediate mode; Mailbox still displays no more than the monitor refresh rate, while Immediate may tear. A presentation cap can pace Roblox's render thread. OpenGL ES uses the selected EGL swap interval.",
         ));
         note.set_wrap(true);
         note.set_halign(gtk::Align::Start);
@@ -1080,7 +1131,7 @@ pub(crate) fn run_ui() -> Result<bool, String> {
         let status_for_save = status.clone();
         let save_button = gtk::Button::with_label("Save settings");
         let window_ref = window.clone();
-        let fps_for_save = fps.clone();
+        let game_fps_for_save = settings.fps_limit;
         let disabled_for_save = disabled_fast_flags.clone();
         let mode_for_settings = theme_mode.clone();
         let preset_for_settings = theme_preset.clone();
@@ -1088,7 +1139,6 @@ pub(crate) fn run_ui() -> Result<bool, String> {
         let animations_for_settings = animations.clone();
         let acceleration_for_settings = hardware_acceleration.clone();
         save_button.connect_clicked(move |_| {
-            let limit = fps_for_save.value_as_int().max(0) as u32;
             let value = Settings {
                 gamemode: gamemode.is_active(),
                 discord_presence: presence.is_active(),
@@ -1100,13 +1150,15 @@ pub(crate) fn run_ui() -> Result<bool, String> {
                 present_mode: selected_choice_id(&present, PRESENT_MODES)
                     .unwrap_or("fifo")
                     .to_owned(),
+                vulkan_fps_limit: (vulkan_fps.value_as_int() > 0)
+                    .then(|| (vulkan_fps.value_as_int() as u32).clamp(30, 500)),
                 gl_swap_interval: selected_choice_id(&gl_interval, GL_SWAP_INTERVALS)
                     .unwrap_or("on")
                     .to_owned(),
                 rust_jnivm: selected_choice_id(&jni_backend, JNI_BACKENDS) == Some("rust"),
                 jnivm_cpp_fallback: jni_fallback.is_active(),
                 host_libc: host_libc.is_active(),
-                fps_limit: (limit > 0).then_some(limit),
+                fps_limit: game_fps_for_save,
                 session: picker_for_save
                     .selected()
                     .checked_sub(1)
@@ -1125,14 +1177,10 @@ pub(crate) fn run_ui() -> Result<bool, String> {
                 hardware_acceleration: acceleration_for_settings.is_active(),
             };
             let settings_error = save(&value).err();
-            let mut errors = sync_frame_cap_fallbacks(limit);
             if let Some(error) = settings_error {
-                errors.insert(0, format!("settings: {error}"));
-            }
-            if errors.is_empty() {
-                status_for_save.set_text("Saved. Changes apply on the next launch.");
+                status_for_save.set_text(&format!("Could not save settings: {error}"));
             } else {
-                status_for_save.set_text(&format!("Saved with frame-cap warnings: {}", errors.join("; ")));
+                status_for_save.set_text("Saved. Changes apply on the next launch.");
             }
         });
 
@@ -1271,26 +1319,8 @@ pub(crate) fn run_ui() -> Result<bool, String> {
         let disabled_for_flags = disabled_fast_flags.clone();
         let flags_status_ref = fast_flags_status.clone();
         let flags_path_for_save = fast_flags_path.clone();
-        let fast_flags_fps = fps.clone();
         fast_flags_save.connect_clicked(move |_| {
-            let mut flags = flags_for_save.borrow_mut();
-            if !disabled_for_flags
-                .borrow()
-                .contains("DFIntTaskSchedulerTargetFps")
-            {
-                let limit = fast_flags_fps.value_as_int().max(0) as u32;
-                if limit == 0 {
-                    flags.remove("DFIntTaskSchedulerTargetFps");
-                    flags.remove("FFlagTaskSchedulerLimitTargetFpsTo2402");
-                } else {
-                    flags.insert("DFIntTaskSchedulerTargetFps".into(), limit.to_string().into());
-                    if limit > 240 {
-                        flags.insert("FFlagTaskSchedulerLimitTargetFpsTo2402".into(), false.into());
-                    } else {
-                        flags.remove("FFlagTaskSchedulerLimitTargetFpsTo2402");
-                    }
-                }
-            }
+            let flags = flags_for_save.borrow_mut();
             match serde_json::to_vec_pretty(&serde_json::Value::Object(flags.clone().into_iter().collect())) {
                 Ok(bytes) => match write_file(&flags_path_for_save, &bytes) {
                     Ok(()) => {
@@ -1375,17 +1405,6 @@ pub(crate) fn run_ui() -> Result<bool, String> {
             }
             game_slider_controls.push(((*key).to_owned(), scale));
         }
-        if let Some((_, game_fps)) = game_slider_controls
-            .iter()
-            .find(|(key, _)| key == "FramerateCap")
-        {
-            let game_fps = game_fps.clone();
-            let game_fps_for_general = game_fps.clone();
-            let general_fps = fps.clone();
-            fps.connect_value_changed(move |spin| game_fps_for_general.set_value(spin.value()));
-            let general_fps_ref = general_fps.clone();
-            game_fps.connect_value_changed(move |scale| general_fps_ref.set_value(scale.value()));
-        }
         let game_scroll = gtk::ScrolledWindow::builder()
             .vexpand(true)
             .hexpand(true)
@@ -1393,7 +1412,7 @@ pub(crate) fn run_ui() -> Result<bool, String> {
             .build();
         game_settings_page.append(&game_scroll);
         let game_path_note = gtk::Label::new(Some(&format!(
-            "These options are saved to {} and take effect on the next launch. Frame cap is shared with General settings and synced to FastFlags.",
+            "These options are saved to {} and take effect on the next launch. The in-game frame cap is independent of Vulkan's VSync and presentation mode, and is synced to Roblox's target FPS FastFlag.",
             game_path.display()
         )));
         game_path_note.set_wrap(true);
@@ -1435,7 +1454,7 @@ pub(crate) fn run_ui() -> Result<bool, String> {
             if let Err(error) = save(&saved_settings) {
                 errors.push(format!("settings: {error}"));
             }
-            errors.extend(sync_frame_cap_fallbacks(frame_cap));
+            errors.extend(sync_frame_cap_flag(frame_cap));
             if errors.is_empty() {
                 game_status_ref.set_text("Saved. Roblox will use these values on the next launch.");
             } else {
@@ -1626,16 +1645,8 @@ fn effective_frame_cap(settings: &Settings) -> u32 {
         .min(360)
 }
 
-fn sync_frame_cap_fallbacks(limit: u32) -> Vec<String> {
+fn sync_frame_cap_flag(limit: u32) -> Vec<String> {
     let mut errors = Vec::new();
-
-    let xml_updates = HashMap::from([("FramerateCap".to_owned(), limit.to_string())]);
-    match update_game_settings(&game_settings_path(), &xml_updates) {
-        Ok(missing) if missing.is_empty() => {}
-        Ok(_) => errors.push("XML does not contain FramerateCap".to_owned()),
-        Err(error) => errors.push(format!("XML: {error}")),
-    }
-
     let flags_path = fast_flags_path();
     let flags_result = match std::fs::read(&flags_path) {
         Ok(bytes) => match serde_json::from_slice::<serde_json::Value>(&bytes) {
@@ -1892,7 +1903,10 @@ fn initial_game_settings_xml(updates: &HashMap<String, String>) -> String {
     for (name, value) in scalar {
         let tag = if GAME_BOOLEAN_OPTIONS.iter().any(|(key, _)| *key == name) {
             "bool"
-        } else if matches!(name, "FramerateCap" | "GraphicsQualityLevel" | "SavedQualityLevel") {
+        } else if matches!(
+            name,
+            "FramerateCap" | "GraphicsQualityLevel" | "SavedQualityLevel"
+        ) {
             "int"
         } else {
             "float"
@@ -1901,7 +1915,9 @@ fn initial_game_settings_xml(updates: &HashMap<String, String>) -> String {
     }
     for (name, components) in vectors {
         if let [Some(x), Some(y)] = components {
-            xml.push_str(&format!("<Vector2 name=\"{name}\"><X>{x}</X><Y>{y}</Y></Vector2>"));
+            xml.push_str(&format!(
+                "<Vector2 name=\"{name}\"><X>{x}</X><Y>{y}</Y></Vector2>"
+            ));
         }
     }
     xml.push_str("</Properties></Item></roblox>\n");

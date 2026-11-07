@@ -229,6 +229,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 "immediate".into()
             }),
+            vulkan_fps_limit: user_settings.vulkan_fps_limit,
             vsync: user_settings.vsync,
             opengl_swap_interval: match user_settings.gl_swap_interval.as_str() {
                 "off" => 0,

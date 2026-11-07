@@ -45,10 +45,12 @@ opts into the ABI-unsafe diagnostic symbol resolver; it is off by default.
 
 Without `--fast-flags`, the client loads `fast-flags.json` beside its settings
 file (`$XDG_CONFIG_HOME/rusty-blox`, or `~/.config/rusty-blox`). The FastFlags
-tab edits that JSON directly. General and Game frame-cap controls stay linked;
-the selected cap is applied to the loaded FastFlags and XML. FastFlags changes
-are saved by the Settings window; the running client does not write its startup
-snapshot back on exit. The Game tab exposes common Roblox settings as checkboxes
+tab edits that JSON directly. The Game tab's in-game frame target is independent
+of Vulkan's presentation mode: the game can target 110 FPS while Mailbox with
+VSync presents at the display refresh rate (60 Hz on a 60 Hz display). The Game
+tab saves its target to Roblox's settings XML and the target-FPS FastFlag.
+FastFlags changes are saved by the Settings window; the running client does not write its startup snapshot
+back on exit. The Game tab exposes common Roblox settings as checkboxes
 and sliders backed by `data/files/appData/GlobalBasicSettings_13.xml`, without
 launching Roblox.
 The client uses `StartScreenSize` for its initial window size, limited to fit
