@@ -210,6 +210,7 @@ impl ClientApp {
         println!("GameActivity initialized; handle={game_activity}");
         crate::startup::initialize_client(&engine, &config, &self.asset_dir, game_activity, size)?;
         roblox_runtime::webview::arm(&engine);
+        roblox_runtime::permissions::arm(|name| engine.symbol(name));
         self.input_natives = InputNatives {
             mouse_move: engine
                 .symbol("Java_com_roblox_engine_jni_NativeInputInterface_nativePassMouseMove"),

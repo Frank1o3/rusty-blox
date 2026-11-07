@@ -1803,8 +1803,15 @@ fn update_game_settings(
     path: &std::path::Path,
     updates: &HashMap<String, String>,
 ) -> Result<Vec<String>, String> {
-    let contents = std::fs::read_to_string(path)
-        .map_err(|error| format!("read {}: {error}", path.display()))?;
+    let contents = match std::fs::read_to_string(path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let contents = initial_game_settings_xml(updates);
+            write_file(path, contents.as_bytes())?;
+            return Ok(Vec::new());
+        }
+        Err(error) => return Err(format!("read {}: {error}", path.display())),
+    };
     validate_xml(&contents)?;
     let mut reader = quick_xml::Reader::from_str(&contents);
     reader.config_mut().trim_text(false);
@@ -1858,6 +1865,47 @@ fn update_game_settings(
         .collect();
     write_file(path, &output)?;
     Ok(missing)
+}
+
+/// Roblox creates this file on its first settings save. Let the launcher's
+/// first save do the same when no game settings file exists yet.
+fn initial_game_settings_xml(updates: &HashMap<String, String>) -> String {
+    let mut scalar = Vec::new();
+    let mut vectors: std::collections::BTreeMap<&str, [Option<&str>; 2]> =
+        std::collections::BTreeMap::new();
+    for (key, value) in updates {
+        if let Some((name, component)) = key.rsplit_once('.') {
+            let slot = match component {
+                "X" => 0,
+                "Y" => 1,
+                _ => continue,
+            };
+            vectors.entry(name).or_default()[slot] = Some(value);
+        } else {
+            scalar.push((key.as_str(), value.as_str()));
+        }
+    }
+    scalar.sort_unstable_by_key(|(name, _)| *name);
+    let mut xml = String::from(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<roblox version=\"4\"><Item class=\"UserGameSettings\"><Properties>",
+    );
+    for (name, value) in scalar {
+        let tag = if GAME_BOOLEAN_OPTIONS.iter().any(|(key, _)| *key == name) {
+            "bool"
+        } else if matches!(name, "FramerateCap" | "GraphicsQualityLevel" | "SavedQualityLevel") {
+            "int"
+        } else {
+            "float"
+        };
+        xml.push_str(&format!("<{tag} name=\"{name}\">{value}</{tag}>"));
+    }
+    for (name, components) in vectors {
+        if let (Some(x), Some(y)) = components {
+            xml.push_str(&format!("<Vector2 name=\"{name}\"><X>{x}</X><Y>{y}</Y></Vector2>"));
+        }
+    }
+    xml.push_str("</Properties></Item></roblox>\n");
+    xml
 }
 
 fn validate_xml(contents: &str) -> Result<(), String> {
