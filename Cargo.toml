@@ -1,33 +1,33 @@
 [package]
     edition="2024"
     name="rusty-blox"
-version="0.1.0"
+    version="0.1.0"
 
 [features]
-default=["webview"]
-# Kept as a no-op alias for existing build commands. WebView is always built.
-webview=[]
+    default=["webview"]
+    # Kept as a no-op alias for existing build commands. WebView is always built.
+    webview=[]
 
 [dependencies]
     gtk4={version="0.11.5", features=["v4_10"]}
     http="1"
-    libc="0.2"
+    libc="0.2.191"
     libloading="0.9.0"
-    quick-xml="0.41.0"
+    quick-xml="0.42.0"
     ring="0.17"
     roblox-logging={path="roblox-runtime/crates/logging"}
     roblox-runtime={path="roblox-runtime"}
     serde={version="1", features=["derive"]}
-    serde_json="1.0.151"
-    sha2="0.10"
-    ureq="3.3.0"
+    serde_json="1.0.154"
+    sha2="0.11.1"
+    ureq="3.5.1"
     wayland-backend={version="0.3.17", features=["client_system"]}
     wayland-client="0.31.15"
     webkit6="0.6"
     winit="0.30.13"
     zbus={version="5.18.0", features=["blocking"]}
-    zip={version="8.6.0", default-features=false, features=["deflate"]}
-    zstd="0.14.0"
+    zip={version="9.4.1", default-features=false, features=["deflate"]}
+    zstd="0.14.3"
 
 [lints.rust]
     unsafe_op_in_unsafe_fn="deny"

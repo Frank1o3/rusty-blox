@@ -1,2 +1,37 @@
 {
+    // === RUST ANALYZER: RESOURCE MANAGEMENT ===
+    "rust-analyzer.checkOnSave": false,
+    "rust-analyzer.cargo.allTargets": false,
+    // Avoid expensive build-script execution during project loading.
+    "rust-analyzer.cargo.buildScripts.enable": false,
+    // Disable procedural macro expansion to reduce background work.
+    "rust-analyzer.procMacro.enable": false,
+    // Don't prewarm analysis caches during startup.
+    "rust-analyzer.cachePriming.enable": false,
+    // Limit worker threads.
+    "rust-analyzer.numThreads": 2,
+    // Reduce retained syntax-tree cache.
+    "rust-analyzer.lru.capacity": 64,
+    // Keep native Rust diagnostics enabled.
+    "rust-analyzer.diagnostics.enable": true,
+    // Exclude generated build artifacts from analysis.
+    "rust-analyzer.files.exclude": [
+        "target"
+    ],
+    // === EDITOR ===
+    "editor.formatOnSave": true,
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.renderWhitespace": "selection",
+    "editor.inlineSuggest.enabled": true,
+    // === FILE WATCHING ===
+    "files.watcherExclude": {
+        "**/target/**": true
+    },
+    // === AUTO SAVE ===
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 500,
+    // === GIT ===
+    "git.autofetch": "all",
+    "git.autofetchPeriod": 60
 }
