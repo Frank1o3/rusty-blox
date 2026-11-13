@@ -19,7 +19,11 @@ const LOG_CATEGORIES: &[(&str, &str, &str)] = &[
         "JNI / JNI VM",
         "JNI calls, VM registration, and JNI bridge messages",
     ),
-    ("linker", "Linker", "Dynamic linker and symbol resolution"),
+    (
+        "linker-sys",
+        "linker-sys",
+        "Dynamic linker-sys and symbol resolution",
+    ),
     ("stubs", "Stubs", "Calls handled by compatibility stubs"),
     ("input", "Input", "Keyboard, mouse, and controller events"),
     ("webview", "WebView", "Roblox embedded browser bridge"),

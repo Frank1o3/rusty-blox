@@ -1593,7 +1593,7 @@ dependencies = [
 name = "roblox-abi"
 version = "0.1.2"
 dependencies = [
- "roblox-linker",
+ "roblox-linker-sys",
  "roblox-logging",
 ]
 
@@ -1601,7 +1601,7 @@ dependencies = [
 name = "roblox-android"
 version = "0.1.2"
 dependencies = [
- "roblox-linker",
+ "roblox-linker-sys",
  "roblox-logging",
  "serde_json",
  "zip",
@@ -1619,11 +1619,11 @@ dependencies = [
 name = "roblox-jni"
 version = "0.1.2"
 dependencies = [
- "roblox-linker",
+ "roblox-linker-sys",
 ]
 
 [[package]]
-name = "roblox-linker"
+name = "roblox-linker-sys"
 version = "0.1.2"
 dependencies = [
  "cmake",
@@ -1642,7 +1642,7 @@ dependencies = [
  "roblox-android",
  "roblox-graphics-vulkan",
  "roblox-jni",
- "roblox-linker",
+ "roblox-linker-sys",
  "roblox-logging",
  "serde_json",
 ]

@@ -88,7 +88,7 @@ unhandled methods and fields can fall back to C++ libjnivm; fallback is enabled
 by default. The OpenGL ES swap interval can be set to off (0), on (1), or
 adaptive (-1, if the host driver supports it). These settings apply on the next
 launch. The General tab also has independent log category checkboxes for base,
-runtime, JNI/JNI VM, linker, stubs, input, WebView, and session messages. Base
+runtime, JNI/JNI VM, linker-sys, stubs, input, WebView, and session messages. Base
 and runtime messages are enabled by default. The WASD option
 lets the most recently pressed key win when opposite directions are held; when
 it is released, a still-held opposite key resumes immediately.
