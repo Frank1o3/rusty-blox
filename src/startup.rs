@@ -76,6 +76,44 @@ pub(crate) fn initialize_client(
         },
     )?;
 
+    // ActivityNativeMain normally receives these through Android's
+    // Application.ActivityLifecycleCallbacks. The engine records per-Activity
+    // state here and later reads it from the Main thread created by
+    // nativeGameGlobalInit; starting that thread without the callbacks leaves
+    // its JNI context unset and can segfault during app-bridge startup.
+    const ACTIVITY_LIFECYCLE: &[&str] = &[
+        "nativeOnPreCreated",
+        "nativeOnCreated",
+        "nativeOnPostCreated",
+        "nativeOnPreStarted",
+        "nativeOnStarted",
+        "nativeOnPostStarted",
+        "nativeOnPreResumed",
+        "nativeOnResumed",
+        "nativeOnPostResumed",
+    ];
+    const ACTIVITY_LIFECYCLE_PREFIX: &str =
+        "Java_com_roblox_universalapp_activitylifecyclecallbacks_JNIActivityLifecycleCallbacks_";
+    for stage in ACTIVITY_LIFECYCLE {
+        let name = format!("{ACTIVITY_LIFECYCLE_PREFIX}{stage}");
+        call_native(engine, &name, |f| {
+            // SAFETY: this is one of the engine's exported Activity lifecycle
+            // callbacks. Its JNI environment and Activity name are supplied by
+            // the runtime's compatibility bridge.
+            unsafe {
+                roblox_runtime::jni::game_activity::activity_lifecycle(
+                    f,
+                    "com.roblox.client.ActivityNativeMain",
+                )
+            }
+        })?;
+    }
+    eprintln!(
+        "[startup] delivered {}/{} ActivityNativeMain lifecycle callbacks",
+        ACTIVITY_LIFECYCLE.len(),
+        ACTIVITY_LIFECYCLE.len()
+    );
+
     eprintln!("[startup] nativeGameGlobalInit");
     call_native(
         engine,
@@ -85,6 +123,7 @@ pub(crate) fn initialize_client(
             unsafe { roblox_runtime::jni::game_activity::appbridge_call_bare(f) }
         },
     )?;
+    eprintln!("[startup] nativeGameGlobalInit returned");
     eprintln!("[startup] nativeUpdateAdapterInit");
     call_native(
         engine,
@@ -94,6 +133,7 @@ pub(crate) fn initialize_client(
             unsafe { roblox_runtime::jni::game_activity::appbridge_call_bare(f) }
         },
     )?;
+    eprintln!("[startup] nativeUpdateAdapterInit returned");
     eprintln!("[startup] nativeAppBridgeV2InitWithParams");
     call_native(
         engine,
@@ -103,6 +143,7 @@ pub(crate) fn initialize_client(
             unsafe { roblox_runtime::jni::game_activity::appbridge_init(f, assets, width, height) }
         },
     )?;
+    eprintln!("[startup] nativeAppBridgeV2InitWithParams returned");
 
     if let Some(session) = &config.session {
         roblox_runtime::session::restore(engine, session.directory())?;
@@ -116,6 +157,7 @@ pub(crate) fn initialize_client(
             unsafe { roblox_runtime::jni::game_activity::appbridge_call_bare(f) }
         },
     )?;
+    eprintln!("[startup] nativeAppBridgeStartLuaAppDM returned");
     call_native(
         engine,
         "Java_com_roblox_engine_jni_NativeGLInterface_nativeAppBridgeV2StartAppWithParams",
@@ -126,6 +168,7 @@ pub(crate) fn initialize_client(
             }
         },
     )?;
+    eprintln!("[startup] nativeAppBridgeV2StartAppWithParams returned");
 
     for (name, is_game) in [
         (
@@ -145,11 +188,14 @@ pub(crate) fn initialize_client(
                 )
             }
         })?;
+        eprintln!("[startup] {name} returned");
     }
 
+    eprintln!("[startup] delivering initial GameActivity surface");
     engine
         .start_game_activity(game_activity, size.width, size.height, 1)
         .map_err(|error| format!("deliver initial surface: {error}"))?;
+    eprintln!("[startup] initial GameActivity surface delivered");
     match roblox_runtime::jni::game_activity::set_input_connection(game_activity)
         .map_err(|error| format!("install GameActivity InputConnection: {error}"))?
     {

@@ -12,6 +12,7 @@ mod app;
 mod client;
 mod client_settings;
 mod desktop;
+mod gamepad;
 mod host_window;
 mod settings;
 mod startup;
@@ -29,12 +30,14 @@ fn main() {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let open_launcher_by_default = std::env::args_os().len() == 1;
-    let mut args = std::env::args_os().skip(1);
+    let raw_args = std::env::args_os().skip(1).collect::<Vec<_>>();
+    let open_launcher_by_default = raw_args.is_empty();
+    let mut args = raw_args.iter().cloned();
     let mut apk_arg = None;
     let mut fast_flags_path = None;
     let mut client_settings = None;
     let mut settings_mode = false;
+    let mut launch_immediately = false;
     let mut update_apk = false;
     let mut import_sober = false;
     let mut session_name: Option<String> = None;
@@ -53,6 +56,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 return Ok(());
             }
             Some("--settings") => settings_mode = true,
+            Some("--launch") => launch_immediately = true,
             Some("--update-apk" | "--download-apk") => update_apk = true,
             Some("--import-sober") => import_sober = true,
             Some("--session") | Some("--add-session") => {
@@ -89,10 +93,28 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if open_launcher_by_default {
         settings_mode = true;
     }
+    if launch_immediately {
+        settings_mode = false;
+    }
     if settings_mode {
-        if !settings::run_ui().map_err(std::io::Error::other)? {
-            return Ok(());
+        if settings::run_ui().map_err(std::io::Error::other)? {
+            // GTK has run its own application loop in this process. Start the
+            // Vulkan/Roblox runtime in a fresh process so its native threads,
+            // JNI VM, and WebKit host do not inherit GTK's process-global state.
+            let executable = std::env::current_exe()?;
+            let mut child = std::process::Command::new(executable);
+            child.arg("--launch");
+            child.args(
+                raw_args
+                    .iter()
+                    .filter(|arg| arg.as_os_str() != "--settings"),
+            );
+            let status = child.status()?;
+            if !status.success() {
+                return Err(format!("client process exited with {status}").into());
+            }
         }
+        return Ok(());
     }
     let lock_root = client::managed_install_dir().ok_or("HOME and XDG_DATA_HOME are unset")?;
     std::fs::create_dir_all(&lock_root)?;

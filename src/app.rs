@@ -25,6 +25,7 @@ pub(crate) struct ClientApp {
     surface_owner: Option<SurfaceOwner>,
     engine: Option<roblox_runtime::LoadedEngine>,
     input_natives: InputNatives,
+    gamepad: Option<crate::gamepad::GamepadHost>,
     game_activity: Option<i64>,
     failure: Option<String>,
     cursor: (f32, f32),
@@ -81,6 +82,7 @@ impl ClientApp {
             surface_owner: None,
             engine: None,
             input_natives: InputNatives::default(),
+            gamepad: None,
             game_activity: None,
             failure: None,
             cursor: (0.0, 0.0),
@@ -221,6 +223,7 @@ impl ClientApp {
             key_event: engine
                 .symbol("Java_com_roblox_engine_jni_NativeGLInterface_nativePassKeyEvent"),
         };
+        self.gamepad = Some(crate::gamepad::GamepadHost::new(&engine));
         self.engine = Some(engine);
         self.game_activity = Some(game_activity);
         Ok(())
@@ -229,6 +232,9 @@ impl ClientApp {
 
 impl Drop for ClientApp {
     fn drop(&mut self) {
+        if let Some(gamepad) = &mut self.gamepad {
+            gamepad.disconnect_all();
+        }
         if let Some(engine) = &self.engine {
             if let Some(session_dir) = &self.session_dir {
                 if let Err(error) = roblox_runtime::session::save(engine, session_dir) {
@@ -470,6 +476,9 @@ impl winit::application::ApplicationHandler for ClientApp {
         }
         if self.game_activity.is_some() {
             let _ = roblox_runtime::android::looper::poll_for_current_thread(0);
+            if let Some(gamepad) = &mut self.gamepad {
+                gamepad.poll();
+            }
             self.refresh_text_focus();
             self.sync_text_overlay();
             self.sync_cursor_lock(event_loop);
@@ -480,14 +489,13 @@ impl winit::application::ApplicationHandler for ClientApp {
             }
             roblox_runtime::gc_if_due();
         }
-        let poll_interval_ms = crate::settings::configured_frame_cap(&self.settings)
-            .map(|cap| {
-                if cap == 0 {
-                    4
-                } else {
-                    (1000 / cap).clamp(2, 16) as u64
-                }
-            })
+        // This is a host maintenance/input-pump deadline, not a frame
+        // scheduler. The runtime does not currently expose a render tick to
+        // pace here, so tying wakeups to Roblox's FPS target only burns CPU.
+        let poll_interval_ms = self
+            .gamepad
+            .as_ref()
+            .map(crate::gamepad::GamepadHost::poll_interval_ms)
             .unwrap_or(16);
         event_loop.set_control_flow(ControlFlow::WaitUntil(
             std::time::Instant::now() + std::time::Duration::from_millis(poll_interval_ms),

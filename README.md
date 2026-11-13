@@ -58,6 +58,15 @@ the display. On X11 it requests a floating dialog window; on Wayland, the
 compositor controls whether the window floats or tiles.
 Focused Roblox text boxes support Ctrl+A, Ctrl+C, Ctrl+X, and Ctrl+V; the system
 clipboard uses `wl-clipboard`, `xclip`, or `xsel` when available.
+Linux controllers are discovered through `/dev/input/js*` and support common
+Xbox and PlayStation button and stick layouts. The current Roblox build requires
+a controller type integer, but its Xbox/PlayStation glyph ordinals are not
+published; the client uses type `0` by default, so button prompts may show the
+wrong controller brand while input still works. Set `RUSTY_BLOX_GAMEPAD_TYPE`
+to try a different integer. Set `RUSTY_BLOX_GAMEPAD=0` to disable controller
+input. The desktop event pump runs host maintenance work every 16 ms when idle
+and every 8 ms with a connected controller, independently of the game's frame
+target; the target is consumed by Roblox and graphics presentation.
 
 Before Roblox starts, the runtime keeps the newest ten Roblox log files and ten
 `memProfStorage*.json` files, then removes empty directories under its data and

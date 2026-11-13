@@ -1150,8 +1150,8 @@ pub(crate) fn run_ui() -> Result<bool, String> {
                 present_mode: selected_choice_id(&present, PRESENT_MODES)
                     .unwrap_or("fifo")
                     .to_owned(),
-                vulkan_fps_limit: (vulkan_fps.value_as_int() > 0)
-                    .then(|| (vulkan_fps.value_as_int() as u32).clamp(30, 500)),
+                vulkan_fps_limit: (vulkan_fps.value() > 0.0)
+                    .then(|| (vulkan_fps.value() as u32).clamp(30, 500)),
                 gl_swap_interval: selected_choice_id(&gl_interval, GL_SWAP_INTERVALS)
                     .unwrap_or("on")
                     .to_owned(),
