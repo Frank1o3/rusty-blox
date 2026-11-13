@@ -94,6 +94,7 @@ lets the most recently pressed key win when opposite directions are held; when
 it is released, a still-held opposite key resumes immediately.
 
 ## Mini FastFlags list for low end devices
+
 ```json
 {
   "FFlagDebugGraphicsPreferVulkan": true,

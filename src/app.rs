@@ -196,6 +196,7 @@ impl ClientApp {
         let settings = crate::client_settings::load(
             config.options.client_settings.as_deref(),
             &config.cache_dir,
+            &config.fast_flags,
         )?;
         engine
             .install_startup_bootstrap(settings, config.fast_flags.to_string())
