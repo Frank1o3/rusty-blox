@@ -1,0 +1,21 @@
+{
+    "DFFlagDebugRenderForceTechnologyVoxel": true,
+    "DFIntDebugFRMQualityLevelOverride": 1,
+    "DFIntCSGLevelOfDetailSwitchingDistance": 50,
+    "DFIntCSGLevelOfDetailSwitchingDistanceL12": 75,
+    "DFIntCSGLevelOfDetailSwitchingDistanceL23": 100,
+    "DFIntCSGLevelOfDetailSwitchingDistanceL34": 150,
+    "FIntRenderShadowIntensity": 0,
+    "FIntRenderLocalLightUpdatesMax": 1,
+    "FIntRenderLocalLightUpdatesMin": 1,
+    "FIntRenderLocalLightFadeInMs": 0,
+    "FFlagDisablePostFx": true,
+    "FFlagGlobalWindRendering": false,
+    "FFlagGlobalWindActivated": false,
+    "FIntTerrainArraySliceSize": 4,
+    "FIntFRMMinGrassDistance": 0,
+    "FIntFRMMaxGrassDistance": 0,
+    "FIntRenderGrassDetailStrands": 0,
+    "FIntRenderGrassHeightScaler": 0,
+    "FIntDebugForceMSAASamples": 0
+}
