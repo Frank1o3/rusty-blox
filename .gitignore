@@ -1,4 +1,4 @@
-/target
+target/
 rusty-blox.log
-/roblox-runtime
 /references/
+third_party/
