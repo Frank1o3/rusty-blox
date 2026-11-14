@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 const JNI_BACKENDS: &[(&str, &str)] = &[("cpp", "C++ libjnivm (default)"), ("rust", "Rust JNI VM")];
+const LINKER_BACKENDS: &[(&str, &str)] = &[("cpp", "C++ mcpelauncher-linker (default)"), ("rust", "Rust native linker (experimental)")];
 const LOG_CATEGORIES: &[(&str, &str, &str)] = &[
     ("base", "Base", "Launcher and Roblox lifecycle messages"),
     (
@@ -191,6 +192,7 @@ pub(crate) struct Settings {
     pub gl_swap_interval: String,
     pub rust_jnivm: bool,
     pub jnivm_cpp_fallback: bool,
+    pub rust_linker: bool,
     pub host_libc: bool,
     /// Roblox's in-engine frame target. Kept under its existing JSON key for
     /// compatibility with saved settings from earlier versions.
@@ -219,6 +221,7 @@ impl Default for Settings {
             gl_swap_interval: "on".into(),
             rust_jnivm: false,
             jnivm_cpp_fallback: true,
+            rust_linker: false,
             host_libc: false,
             fps_limit: None,
             session: None,
@@ -974,6 +977,12 @@ pub(crate) fn run_ui() -> Result<bool, String> {
         });
         settings_page.append(&jni_fallback);
 
+        let linker_backend = choice_dropdown(
+            LINKER_BACKENDS,
+            if settings.rust_linker { "rust" } else { "cpp" },
+        );
+        settings_page.append(&labeled("Linker backend", &linker_backend));
+
         let host_libc = gtk::CheckButton::with_label(
             "Use host libc for otherwise unresolved imports (ABI-unsafe diagnostic mode)",
         );
@@ -1161,6 +1170,7 @@ pub(crate) fn run_ui() -> Result<bool, String> {
                     .to_owned(),
                 rust_jnivm: selected_choice_id(&jni_backend, JNI_BACKENDS) == Some("rust"),
                 jnivm_cpp_fallback: jni_fallback.is_active(),
+                rust_linker: selected_choice_id(&linker_backend, LINKER_BACKENDS) == Some("rust"),
                 host_libc: host_libc.is_active(),
                 fps_limit: game_fps_for_save,
                 session: picker_for_save

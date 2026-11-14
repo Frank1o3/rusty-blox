@@ -27,6 +27,7 @@ fn main() {
         roblox_logging::emit_error(format!("rusty-blox: {error}"));
         std::process::exit(1);
     }
+    std::process::exit(0);
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -147,6 +148,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         std::env::set_var(
             "USE_EXPERIMENTAL_JNIVM",
             if use_rust_jnivm { "1" } else { "0" },
+        );
+    }
+    let env_requests_rust_linker = std::env::var("USE_EXPERIMENTAL_RUST_LINKER")
+        .is_ok_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "true" | "1"));
+    let use_rust_linker = user_settings.rust_linker || env_requests_rust_linker;
+    unsafe {
+        std::env::set_var(
+            "USE_EXPERIMENTAL_RUST_LINKER",
+            if use_rust_linker { "1" } else { "0" },
         );
     }
     roblox_runtime::set_jnivm_cpp_fallback(user_settings.jnivm_cpp_fallback);

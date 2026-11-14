@@ -264,7 +264,6 @@ impl winit::application::ApplicationHandler for ClientApp {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => {
-                roblox_runtime::graphics::clear_surface();
                 event_loop.exit();
             }
             WindowEvent::Focused(focused) => {
@@ -328,6 +327,10 @@ impl winit::application::ApplicationHandler for ClientApp {
             WindowEvent::KeyboardInput { event, .. } => {
                 if let PhysicalKey::Code(code) = event.physical_key {
                     if event.state == ElementState::Pressed {
+                        if self.modifiers.alt_key() && code == KeyCode::F4 {
+                            event_loop.exit();
+                            return;
+                        }
                         if self.modifiers.control_key() && self.text_shortcut(code) {
                             return;
                         }
