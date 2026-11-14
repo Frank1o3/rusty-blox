@@ -2,6 +2,7 @@
     edition="2024"
     name="rusty-blox"
     version="0.1.0"
+    license="BSD-3-Clause"
 
 [features]
     default=["webview"]
