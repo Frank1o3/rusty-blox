@@ -9,6 +9,7 @@ use std::path::{Component, Path, PathBuf};
 
 const SOBER_APK_RELATIVE: &str =
     ".var/app/org.vinegarhq.Sober/data/sober/packages/x86_64/com.roblox.client/base.apk";
+const MANAGED_STAMP: &str = ".rusty-blox-managed-stamp";
 /// Runtime inputs imported into the client's managed data directory.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ImportedClient {
@@ -34,6 +35,30 @@ pub fn discover_sober_apks() -> Option<Vec<PathBuf>> {
 
 /// Reuse a previously imported or downloaded managed installation.
 pub fn discover_managed_client(managed_dir: &Path) -> Option<ImportedClient> {
+    let apk_paths = managed_apk_sources(managed_dir)?;
+    let native_lib_dir = managed_dir.join("lib/x86_64");
+    if !native_lib_dir.join("libroblox.so").is_file() || !managed_stamp_matches(managed_dir) {
+        return None;
+    }
+    Some(ImportedClient {
+        apk_paths,
+        native_lib_dir,
+    })
+}
+
+/// Load the managed installation, rebuilding it from its stored APKs if the
+/// APKs and extracted native libraries no longer match the last published set.
+pub fn load_managed_client(managed_dir: &Path) -> Result<Option<ImportedClient>, ImportError> {
+    if let Some(installed) = discover_managed_client(managed_dir) {
+        return Ok(Some(installed));
+    }
+    let Some(apks) = managed_apk_sources(managed_dir) else {
+        return Ok(None);
+    };
+    import_apks(&apks, managed_dir).map(Some)
+}
+
+fn managed_apk_sources(managed_dir: &Path) -> Option<Vec<PathBuf>> {
     let base = managed_dir.join("base.apk");
     let base = if base.is_file() {
         base
@@ -49,19 +74,12 @@ pub fn discover_managed_client(managed_dir: &Path) -> Option<ImportedClient> {
                         .is_some_and(|name| name != "split_config.x86_64.apk")
             })?
     };
-    let native_lib_dir = managed_dir.join("lib/x86_64");
-    if !base.is_file() || !native_lib_dir.join("libroblox.so").is_file() {
-        return None;
-    }
-    let mut apk_paths = vec![base];
-    let split = managed_dir.join("split_config.x86_64.apk");
+    let mut apks = vec![base.clone()];
+    let split = base.with_file_name("split_config.x86_64.apk");
     if split.is_file() {
-        apk_paths.push(split);
+        apks.push(split);
     }
-    Some(ImportedClient {
-        apk_paths,
-        native_lib_dir,
-    })
+    Some(apks)
 }
 
 /// Choose the client's persistent installation directory.
@@ -138,8 +156,17 @@ pub fn import_apks(sources: &[PathBuf], managed_dir: &Path) -> Result<ImportedCl
     }
 
     let stamp = source_stamp(sources)?;
-    if fs::read_to_string(managed_dir.join(".rusty-blox-source-stamp"))
-        .is_ok_and(|existing| existing == stamp)
+    let published_artifacts_match = managed_stamp_matches(managed_dir);
+    let same_managed_sources = sources.iter().all(|source| {
+        source.parent() == Some(managed_dir)
+            && source
+                .file_name()
+                .is_some_and(|name| managed_dir.join(name).is_file())
+    });
+    let source_stamp_matches = fs::read_to_string(managed_dir.join(".rusty-blox-source-stamp"))
+        .is_ok_and(|existing| existing == stamp);
+    if published_artifacts_match
+        && (source_stamp_matches || same_managed_sources)
         && sources.iter().all(|source| {
             source
                 .file_name()
@@ -240,7 +267,55 @@ fn import_to_staging(sources: &[PathBuf], staging: &Path, stamp: &str) -> Result
         return Err(ImportError::RobloxLibraryMissing);
     }
     fs::write(staging.join(".rusty-blox-source-stamp"), stamp)?;
+    fs::write(
+        staging.join(MANAGED_STAMP),
+        managed_artifact_stamp(staging)?,
+    )?;
     Ok(())
+}
+
+fn managed_stamp_matches(managed_dir: &Path) -> bool {
+    fs::read_to_string(managed_dir.join(MANAGED_STAMP))
+        .ok()
+        .zip(managed_artifact_stamp(managed_dir).ok())
+        .is_some_and(|(stored, current)| stored == current)
+}
+
+fn managed_artifact_stamp(root: &Path) -> io::Result<String> {
+    use std::os::unix::fs::MetadataExt;
+
+    let mut files = fs::read_dir(root)?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.is_file() && path.extension().is_some_and(|ext| ext == "apk"))
+        .collect::<Vec<_>>();
+    let native_dir = root.join("lib/x86_64");
+    files.extend(
+        fs::read_dir(native_dir)?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.is_file() && path.extension().is_some_and(|ext| ext == "so")),
+    );
+    files.sort();
+
+    let mut stamp = String::new();
+    for path in files {
+        let relative = path.strip_prefix(root).map_err(io::Error::other)?;
+        let metadata = fs::metadata(&path)?;
+        stamp.push_str(&format!(
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            relative.display(),
+            metadata.dev(),
+            metadata.ino(),
+            metadata.size(),
+            metadata.mtime(),
+            metadata.mtime_nsec(),
+            metadata.ctime(),
+            metadata.ctime_nsec(),
+            metadata.mode()
+        ));
+    }
+    Ok(stamp)
 }
 
 fn native_library_name(path: &Path) -> Option<&str> {

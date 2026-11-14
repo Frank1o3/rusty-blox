@@ -215,7 +215,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         let apks =
             client::discover_sober_apks().ok_or("no Sober x86-64 APK was found to import")?;
         client::import_apks(&apks, &managed_dir)?
-    } else if let Some(installed) = client::discover_managed_client(&managed_dir) {
+    } else if let Some(installed) = client::load_managed_client(&managed_dir)? {
         installed
     } else if let Some(apks) = client::discover_sober_apks() {
         client::import_apks(&apks, &managed_dir)?

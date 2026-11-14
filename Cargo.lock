@@ -1632,6 +1632,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "roblox-linker"
+version = "0.1.2"
+dependencies = [
+ "libc",
+ "rustix 1.1.6",
+]
+
+[[package]]
 name = "roblox-linker-sys"
 version = "0.1.2"
 dependencies = [
@@ -1651,6 +1659,7 @@ dependencies = [
  "roblox-android",
  "roblox-graphics-vulkan",
  "roblox-jni-sys",
+ "roblox-linker",
  "roblox-linker-sys",
  "roblox-logging",
  "serde_json",
