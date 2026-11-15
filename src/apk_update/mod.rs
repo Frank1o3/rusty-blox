@@ -1,74 +1,45 @@
-//! Download and verify Roblox's Android x86-64 APK before installing it.
+//! Fetching a Roblox Android x86-64 build from a mirror, verifying it, and
+//! handing it to the client's staged APK importer.
 //!
-//! The downloader and APK signature verifier are adapted from Cordial's
-//! `cordial-update` crate (GPL-3.0-or-later), commit
-//! `7abbaf5d5f6cc81ca97e448812985d3f180b2420`. Roblox does not expose a public
-//! Android APK download URL, so the update source is APKPure. APKs are accepted
-//! only when their APK Signature Scheme v2/v3 certificate matches Roblox's
-//! pinned certificate. A mirror-provided checksum is never treated as proof.
+//! Roblox publishes no public Android APK download, so `--update-apk` asks a
+//! mirror (APKPure by default) for the newest build. A mirror serves bytes
+//! nobody here can vouch for, so nothing is installed until
+//! [`signature`] proves Roblox's own signing certificate signed the archive —
+//! see `certificates.json` for what "Roblox's" means concretely.
+//!
+//! The pieces, in call order: [`source`] asks the mirror which build is
+//! newest and downloads it, [`net`] owns the network policy (https only,
+//! allow-listed hosts, redirects followed by hand), [`signature`] checks the
+//! result, and the verified files go through `client::import_apks`.
 
-mod apk_signature;
-mod provider;
-mod url_policy;
+mod net;
+mod signature;
+mod source;
 
 use std::error::Error;
 use std::fmt;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use provider::{ApkPure, Cancel, Provider};
+/// Where the engine lives inside an APK, for whatever host architecture the
+/// client was built for.
+pub(crate) const LIBRARY_IN_APK: &str = "lib/x86_64/libroblox.so";
 
-const LIBRARY_IN_APK: &str = "lib/x86_64/libroblox.so";
-const USER_AGENT: &str = concat!("rusty-blox/", env!("CARGO_PKG_VERSION"), " (Linux)");
+pub(crate) const USER_AGENT: &str = concat!("rusty-blox/", env!("CARGO_PKG_VERSION"), " (Linux)");
 
-#[derive(Debug)]
-enum Unreachable {
-    Transport {
-        url: String,
-        why: String,
-    },
-    Status {
-        url: String,
-        status: u16,
-        body: String,
-    },
-    Malformed {
-        url: String,
-        why: String,
-    },
-    Cancelled,
-    NoSource {
-        why: String,
-    },
-}
-
-impl fmt::Display for Unreachable {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Transport { url, why } => write!(f, "could not reach {url}: {why}"),
-            Self::Status { url, status, body } if body.trim().is_empty() => {
-                write!(f, "{url} answered HTTP {status}")
-            }
-            Self::Status { url, status, body } => {
-                write!(f, "{url} answered HTTP {status}: {}", body.trim())
-            }
-            Self::Malformed { url, why } => write!(f, "{url} returned unusable data: {why}"),
-            Self::Cancelled => f.write_str("APK download was cancelled"),
-            Self::NoSource { why } => f.write_str(why),
-        }
-    }
-}
-
-impl Error for Unreachable {}
-
-/// Fetch the newest x86-64 build, verify its Roblox signature, and publish it
-/// through the client's existing staged APK importer.
+/// Fetch the newest build, verify its signature, and publish it through
+/// [`crate::client::import_apks`].
+///
+/// The download happens in a staging directory beside the managed install and
+/// is removed again afterwards, whatever the outcome: `import_apks` is the
+/// only thing that turns staged files into an installation, and until it says
+/// otherwise there is no such thing as most of an update.
 pub(crate) fn update(managed_dir: &Path) -> Result<String, UpdateError> {
     let parent = managed_dir
         .parent()
         .ok_or_else(|| UpdateError::Local("managed APK path has no parent".into()))?;
     fs::create_dir_all(parent)?;
-    let staging = parent.join(format!(".roblox-apk-update-{}", std::process::id()));
+    let staging = parent.join(format!(".roblox-apk-staging-{}", std::process::id()));
     if staging.exists() {
         fs::remove_dir_all(&staging)?;
     }
@@ -80,60 +51,70 @@ pub(crate) fn update(managed_dir: &Path) -> Result<String, UpdateError> {
 }
 
 fn update_into(staging: &Path, managed_dir: &Path) -> Result<String, UpdateError> {
-    let provider = ApkPure::default();
+    let fetch = source::ApkPure;
     let mut progress = |item| match item {
-        provider::Progress::Asking { provider } => {
-            eprintln!("Roblox APK: checking {provider} for the latest x86-64 build")
+        source::Progress::Asking { endpoint } => {
+            eprintln!("Roblox APK: checking {endpoint} for the latest x86-64 build")
         }
-        provider::Progress::Fetching { file, done, total } => {
+        source::Progress::Fetch { file, done, total } => {
             if let Some(total) = total {
                 eprintln!("Roblox APK: {file}: {done}/{total} bytes")
             } else {
                 eprintln!("Roblox APK: {file}: {done} bytes")
             }
         }
-        provider::Progress::Verifying { file } => {
+        source::Progress::Verify { file } => {
             eprintln!("Roblox APK: verifying {file}")
         }
     };
-    let version = provider.newest(&mut progress)?;
-    eprintln!("Roblox APK: downloading version {}", version.name);
-    let archives = provider.fetch(&version, &Cancel::new(), staging, &mut progress)?;
 
-    let trusted = apk_signature::pinned();
+    let version = fetch
+        .newest(&mut progress)
+        .map_err(|e| UpdateError::Source(e.to_string()))?;
+    eprintln!("Roblox APK: downloading version {}", version.name);
+    let archives = fetch
+        .fetch(&version, &net::Cancel::default(), staging, &mut progress)
+        .map_err(|e| UpdateError::Source(e.to_string()))?;
+
+    let trusted = signature::pinned();
     for path in archives.distinct() {
-        progress(provider::Progress::Verifying {
+        progress(source::Progress::Verify {
             file: path
                 .file_name()
                 .unwrap_or_default()
                 .to_string_lossy()
                 .into_owned(),
         });
-        apk_signature::verify_signed_by(path, &trusted)
+        signature::verify_signed_by(path, &trusted)
             .map_err(|error| UpdateError::Rejected(error.to_string()))?;
     }
 
     let base = staging.join("base.apk");
     let split = staging.join("split_config.x86_64.apk");
-    if archives.base == archives.split {
+    let apks: Vec<PathBuf> = if archives.base == archives.split {
         fs::rename(&archives.base, &base)?;
-        let imported = crate::client::import_apks(&[base], managed_dir)
-            .map_err(|error| UpdateError::Local(error.to_string()))?;
-        drop(imported);
+        vec![base]
     } else {
         fs::rename(&archives.base, &base)?;
         fs::rename(&archives.split, &split)?;
-        let imported = crate::client::import_apks(&[base, split], managed_dir)
-            .map_err(|error| UpdateError::Local(error.to_string()))?;
-        drop(imported);
-    }
+        vec![base, split]
+    };
+    let imported = crate::client::import_apks(&apks, managed_dir)
+        .map_err(|error| UpdateError::Local(error.to_string()))?;
+    drop(imported);
     Ok(version.name)
 }
 
+/// Why an update did not happen, with the distinction that matters to a
+/// person staring at the failure: the source failed, the bytes arrived but
+/// were rejected, or something local went wrong.
 #[derive(Debug)]
 pub(crate) enum UpdateError {
+    /// The mirror could not be reached, or answered unusably.
     Source(String),
+    /// The download arrived intact but Roblox did not sign it.
     Rejected(String),
+    /// A local step (staging, importing) failed.
     Local(String),
     Io(std::io::Error),
 }
@@ -151,14 +132,8 @@ impl fmt::Display for UpdateError {
 
 impl Error for UpdateError {}
 
-impl From<Unreachable> for UpdateError {
-    fn from(value: Unreachable) -> Self {
-        Self::Source(value.to_string())
-    }
-}
-
 impl From<std::io::Error> for UpdateError {
-    fn from(value: std::io::Error) -> Self {
-        Self::Io(value)
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
     }
 }

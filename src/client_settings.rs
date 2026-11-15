@@ -70,7 +70,7 @@ pub(crate) fn load(
 
 /// Put host FastFlags into the same applicationSettings document Roblox reads.
 /// `nativePreloadFlagOverrides` is still called as a matching Android startup
-/// hook, but Cordial's investigation found its accepted JSON shape unknown.
+/// hook, but measurement so far has not established its accepted JSON shape.
 fn merge_fast_flags(body: String, fast_flags: &serde_json::Value) -> Result<String, String> {
     let Some(overrides) = fast_flags.as_object() else {
         return Err("FastFlags document must be a JSON object".to_owned());
