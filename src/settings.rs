@@ -6,8 +6,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 
-const JNI_BACKENDS: &[(&str, &str)] = &[("cpp", "C++ libjnivm (default)"), ("rust", "Rust JNI VM")];
-const LINKER_BACKENDS: &[(&str, &str)] = &[("cpp", "C++ mcpelauncher-linker (default)"), ("rust", "Rust native linker (experimental)")];
+const JNI_BACKENDS: &[(&str, &str)] = &[("rust", "Rust JNI VM (default)"), ("cpp", "C++ libjnivm")];
+const LINKER_BACKENDS: &[(&str, &str)] = &[("rust", "Rust native linker (default)"), ("cpp", "C++ mcpelauncher-linker")];
 const LOG_CATEGORIES: &[(&str, &str, &str)] = &[
     ("base", "Base", "Launcher and Roblox lifecycle messages"),
     (
@@ -21,9 +21,14 @@ const LOG_CATEGORIES: &[(&str, &str, &str)] = &[
         "JNI calls, VM registration, and JNI bridge messages",
     ),
     (
-        "linker-sys",
-        "linker-sys",
-        "Dynamic linker-sys and symbol resolution",
+        "linker",
+        "Linker",
+        "Dynamic linker and symbol resolution (either backend)",
+    ),
+    (
+        "linker-loads",
+        "Library loads",
+        "Shared objects requested, mapped, and dlopen'd",
     ),
     ("stubs", "Stubs", "Calls handled by compatibility stubs"),
     ("input", "Input", "Keyboard, mouse, and controller events"),
@@ -219,9 +224,9 @@ impl Default for Settings {
             present_mode: "fifo".into(),
             vulkan_fps_limit: None,
             gl_swap_interval: "on".into(),
-            rust_jnivm: false,
+            rust_jnivm: true,
             jnivm_cpp_fallback: true,
-            rust_linker: false,
+            rust_linker: true,
             host_libc: false,
             fps_limit: None,
             session: None,
@@ -260,6 +265,19 @@ pub(crate) fn load() -> Settings {
     std::fs::read(path())
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .map(|mut settings: Settings| {
+            // The linker log toggle used to be saved as "linker-sys"; keep
+            // enabling it for profiles saved before the rename.
+            settings
+                .log_categories
+                .retain_mut(|category| {
+                    if category == "linker-sys" {
+                        *category = "linker".to_owned();
+                    }
+                    true
+                });
+            settings
+        })
         .unwrap_or_default()
 }
 

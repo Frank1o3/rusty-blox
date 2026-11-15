@@ -30,6 +30,19 @@ fn main() {
     std::process::exit(0);
 }
 
+/// Read a backend-selection environment flag. `true`/`1` selects the Rust
+/// backend, `false`/`0` selects the C++ one, anything else defers to the
+/// saved settings.
+fn env_backend_flag(name: &str) -> Option<bool> {
+    std::env::var(name).ok().and_then(|value| {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "true" | "1" => Some(true),
+            "false" | "0" => Some(false),
+            _ => None,
+        }
+    })
+}
+
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let raw_args = std::env::args_os().skip(1).collect::<Vec<_>>();
     let open_launcher_by_default = raw_args.is_empty();
@@ -137,22 +150,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             user_settings.log_categories.join(","),
         );
     }
-    let env_requests_rust = std::env::var("USE_EXPERIMENTAL_JNIVM")
-        .is_ok_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "true" | "1"));
-    let use_rust_jnivm = user_settings.rust_jnivm || env_requests_rust;
-    // The JNI backend is selected during native startup, before the client
-    // creates worker threads. Keep the existing environment opt-in as a
-    // developer override (dev.sh uses it) while making the saved UI choice the
-    // normal launch path.
+    // `USE_EXPERIMENTAL_*` selects a backend when set to true/1 or false/0;
+    // any other value leaves the saved choice in effect.
+    // Environment flags are authoritative developer overrides in both
+    // directions; the saved UI choice is the normal launch path.
+    let use_rust_jnivm = env_backend_flag("USE_EXPERIMENTAL_JNIVM").unwrap_or(user_settings.rust_jnivm);
     unsafe {
         std::env::set_var(
             "USE_EXPERIMENTAL_JNIVM",
             if use_rust_jnivm { "1" } else { "0" },
         );
     }
-    let env_requests_rust_linker = std::env::var("USE_EXPERIMENTAL_RUST_LINKER")
-        .is_ok_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "true" | "1"));
-    let use_rust_linker = user_settings.rust_linker || env_requests_rust_linker;
+    let use_rust_linker =
+        env_backend_flag("USE_EXPERIMENTAL_RUST_LINKER").unwrap_or(user_settings.rust_linker);
     unsafe {
         std::env::set_var(
             "USE_EXPERIMENTAL_RUST_LINKER",
