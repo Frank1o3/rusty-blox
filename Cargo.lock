@@ -1224,6 +1224,7 @@ name = "jnivm"
 version = "0.1.3"
 dependencies = [
  "jni-sys 0.4.1",
+ "libc",
  "roblox-logging",
 ]
 
