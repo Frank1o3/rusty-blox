@@ -12,7 +12,7 @@ inputs. Findings below are measured with diff, not inferred from similarity.
 | `src/client_settings.rs` | One comment cites "Cordial's investigation" | Reword comment |
 | roblox-runtime `native/*.cpp` | Near-verbatim derivative of Cordial's `native/` tree (see `roblox-runtime/docs/porting-plan.md` §License for measured diffs) | Replaced by the ongoing C++→Rust migration (Phases 3–5) |
 | roblox-runtime `crates/linker` | Foundations adapted from Eclipse (MIT), attributed in `crates/linker/ECLIPSE-NOTICE.md` | Keep; MIT→BSD-3-Clause is compatible with attribution |
-| roblox-runtime `crates/jnivm` | Independent Rust implementation; behavioral reference is libjnivm (MIT). `abi/direct_buffer.rs` cites libjnivm internals | Keep; add a MIT provenance notice |
+| roblox-runtime `crates/jnivm` | Independent Rust implementation; behavioral reference is libjnivm (MIT). `abi/direct_buffer.rs` is adapted from libjnivm's `internal/bytebuffer.cpp` | Keep; MIT provenance notice added in `crates/jnivm/LIBJNIVM-NOTICE.md` |
 | roblox-runtime `third_party/libbadcpu`, `mocktail-webview` | Checked in, referenced by no build file | Delete |
 | roblox-runtime `third_party/mcpelauncher-linker`, `libjnivm` | MIT submodules backing the C++ path | Removed only after the Rust linker/JNI VM are the verified default |
 
@@ -70,4 +70,5 @@ undisputed. This is the primary replacement target (task §2).
 - Cordial's GPL text is used strictly as a behavioral reference; no GPL file
   is translated line-by-line into the replacements.
 - MIT-sourced ports (Eclipse, libjnivm) are allowed with attribution notices,
-  which `crates/linker` has and `crates/jnivm` will gain.
+  which `crates/linker` has in `ECLIPSE-NOTICE.md` and `crates/jnivm` has in
+  `LIBJNIVM-NOTICE.md`.
