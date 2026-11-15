@@ -6,8 +6,6 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 
-const JNI_BACKENDS: &[(&str, &str)] = &[("rust", "Rust JNI VM (default)"), ("cpp", "C++ libjnivm")];
-const LINKER_BACKENDS: &[(&str, &str)] = &[("rust", "Rust native linker (default)"), ("cpp", "C++ mcpelauncher-linker")];
 const LOG_CATEGORIES: &[(&str, &str, &str)] = &[
     ("base", "Base", "Launcher and Roblox lifecycle messages"),
     (
@@ -23,7 +21,7 @@ const LOG_CATEGORIES: &[(&str, &str, &str)] = &[
     (
         "linker",
         "Linker",
-        "Dynamic linker and symbol resolution (either backend)",
+        "Rust ELF mapping and symbol resolution",
     ),
     (
         "linker-loads",
@@ -195,9 +193,6 @@ pub(crate) struct Settings {
     /// Optional Vulkan frame submission cap; None adds no software cap.
     pub vulkan_fps_limit: Option<u32>,
     pub gl_swap_interval: String,
-    pub rust_jnivm: bool,
-    pub jnivm_cpp_fallback: bool,
-    pub rust_linker: bool,
     pub host_libc: bool,
     /// Roblox's in-engine frame target. Kept under its existing JSON key for
     /// compatibility with saved settings from earlier versions.
@@ -224,9 +219,6 @@ impl Default for Settings {
             present_mode: "fifo".into(),
             vulkan_fps_limit: None,
             gl_swap_interval: "on".into(),
-            rust_jnivm: true,
-            jnivm_cpp_fallback: true,
-            rust_linker: true,
             host_libc: false,
             fps_limit: None,
             session: None,
@@ -979,27 +971,11 @@ pub(crate) fn run_ui() -> Result<bool, String> {
         wasd_last_pressed.set_active(settings.wasd_last_pressed);
         settings_page.append(&wasd_last_pressed);
 
-        let jni_backend = choice_dropdown(
-            JNI_BACKENDS,
-            if settings.rust_jnivm { "rust" } else { "cpp" },
-        );
-        settings_page.append(&labeled("JNI backend", &jni_backend));
-        let jni_fallback = gtk::CheckButton::with_label(
-            "Use C++ libjnivm for methods and fields Rust does not handle",
-        );
-        jni_fallback.set_active(settings.jnivm_cpp_fallback);
-        jni_fallback.set_sensitive(settings.rust_jnivm);
-        let fallback_ref = jni_fallback.clone();
-        jni_backend.connect_selected_notify(move |backend| {
-            fallback_ref.set_sensitive(selected_choice_id(backend, JNI_BACKENDS) == Some("rust"));
-        });
-        settings_page.append(&jni_fallback);
-
-        let linker_backend = choice_dropdown(
-            LINKER_BACKENDS,
-            if settings.rust_linker { "rust" } else { "cpp" },
-        );
-        settings_page.append(&labeled("Linker backend", &linker_backend));
+        let native_backends = gtk::Label::new(Some(
+            "JNI and ELF loading use the Rust implementations.",
+        ));
+        native_backends.set_halign(gtk::Align::Start);
+        settings_page.append(&native_backends);
 
         let host_libc = gtk::CheckButton::with_label(
             "Use host libc for otherwise unresolved imports (ABI-unsafe diagnostic mode)",
@@ -1186,9 +1162,6 @@ pub(crate) fn run_ui() -> Result<bool, String> {
                 gl_swap_interval: selected_choice_id(&gl_interval, GL_SWAP_INTERVALS)
                     .unwrap_or("on")
                     .to_owned(),
-                rust_jnivm: selected_choice_id(&jni_backend, JNI_BACKENDS) == Some("rust"),
-                jnivm_cpp_fallback: jni_fallback.is_active(),
-                rust_linker: selected_choice_id(&linker_backend, LINKER_BACKENDS) == Some("rust"),
                 host_libc: host_libc.is_active(),
                 fps_limit: game_fps_for_save,
                 session: picker_for_save

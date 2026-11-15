@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use crate::host_window::SurfaceOwner;
@@ -40,7 +40,7 @@ pub(crate) struct ClientApp {
     text_value: String,
     text_cursor: usize,
     text_selection_anchor: Option<usize>,
-    forwarded_keys: HashSet<i32>,
+    forwarded_keys: HashMap<i32, i32>,
     movement_pressed: Vec<KeyCode>,
     movement_active: [Option<KeyCode>; 2],
     settings: crate::settings::Settings,
@@ -97,7 +97,7 @@ impl ClientApp {
             text_value: String::new(),
             text_cursor: 0,
             text_selection_anchor: None,
-            forwarded_keys: HashSet::new(),
+            forwarded_keys: HashMap::new(),
             movement_pressed: Vec::new(),
             movement_active: [None, None],
             settings,
@@ -270,6 +270,7 @@ impl winit::application::ApplicationHandler for ClientApp {
                 self.window_focused = focused;
                 if !focused {
                     self.clear_movement_keys(event_loop);
+                    self.clear_forwarded_keys(event_loop);
                     self.clear_mouse_buttons(event_loop);
                 }
                 if !focused && self.cursor_locked {
@@ -368,9 +369,11 @@ impl winit::application::ApplicationHandler for ClientApp {
                     {
                         self.clear_movement_keys(event_loop);
                     }
-                    let movement_key = self.settings.wasd_last_pressed
-                        && !text_box_focused
-                        && movement_axis(code).is_some();
+                    let movement_key = use_custom_movement(
+                        self.settings.wasd_last_pressed,
+                        text_box_focused,
+                        code,
+                    );
                     if movement_key {
                         self.update_movement_key(code, event.state, event_loop);
                     } else if let (Some(key_code), Some(evdev_code)) =
@@ -385,7 +388,6 @@ impl winit::application::ApplicationHandler for ClientApp {
                                 .to_text()
                                 .and_then(|s| s.chars().next())
                                 .map_or(0, |ch| ch as i32),
-                            self.modifiers,
                             event.repeat,
                             event_loop,
                         );
@@ -932,29 +934,20 @@ impl ClientApp {
         key_code: i32,
         evdev_code: i32,
         unicode_char: i32,
-        modifiers: ModifiersState,
         repeat: bool,
         event_loop: &ActiveEventLoop,
     ) {
-        let mut android_modifiers = 0;
-        if modifiers.shift_key() {
-            android_modifiers |= 1;
-        }
-        if modifiers.alt_key() {
-            android_modifiers |= 2;
-        }
-        if modifiers.control_key() {
-            android_modifiers |= 0x1000;
-        }
         let text_box_focused = roblox_runtime::jni::game_activity::focused_textbox().is_some();
         let text_key = is_evdev_text_key(evdev_code);
-        let send_to_game = if down {
-            !(text_box_focused && text_key)
-        } else {
-            self.forwarded_keys.remove(&evdev_code)
-        };
-        let result = send_to_game
-            .then(|| {
+        let forwarded_key_code = forwarded_key_event(
+            &mut self.forwarded_keys,
+            down,
+            key_code,
+            evdev_code,
+            text_box_focused && text_key,
+        );
+        let result = forwarded_key_code
+            .map(|forwarded_key_code| {
                 self.input_natives.key_event.map(|native| {
                     // SAFETY: this export belongs to the live engine library.
                     unsafe {
@@ -962,18 +955,15 @@ impl ClientApp {
                             native,
                             down,
                             evdev_code,
-                            android_modifiers,
+                            forwarded_key_code,
                             repeat,
                         )
                     }
                 })
             })
             .flatten();
-        if down && send_to_game && result.is_some() {
-            self.forwarded_keys.insert(evdev_code);
-        }
         if down {
-            let native_status = if text_box_focused && text_key {
+            let native_status = if forwarded_key_code.is_none() {
                 "suppressed for text box"
             } else {
                 match &result {
@@ -989,48 +979,34 @@ impl ClientApp {
         self.record_input_result(result, event_loop);
     }
 
+    fn clear_forwarded_keys(&mut self, event_loop: &ActiveEventLoop) {
+        let pressed = take_forwarded_keys(&mut self.forwarded_keys);
+        for (scan_code, key_code) in pressed {
+            self.forward_key(false, key_code, scan_code, 0, false, event_loop);
+        }
+    }
+
     fn update_movement_key(
         &mut self,
         code: KeyCode,
         state: ElementState,
         event_loop: &ActiveEventLoop,
     ) {
-        if state == ElementState::Pressed {
-            // Key repeat must not make a held direction jump ahead of a newer
-            // opposing key.
-            if !self.movement_pressed.contains(&code) {
-                self.movement_pressed.push(code);
-            }
-        } else {
-            self.movement_pressed.retain(|pressed| *pressed != code);
-        }
-
-        for axis in 0..2 {
-            let next = self
-                .movement_pressed
-                .iter()
-                .rev()
-                .copied()
-                .find(|pressed| movement_axis(*pressed) == Some(axis));
-            if self.movement_active[axis] == next {
-                continue;
-            }
-            if let Some(previous) = self.movement_active[axis] {
-                self.send_movement_key(previous, false, event_loop);
-            }
-            if let Some(next) = next {
-                self.send_movement_key(next, true, event_loop);
-            }
-            self.movement_active[axis] = next;
+        let (transitions, count) = update_movement_state(
+            &mut self.movement_pressed,
+            &mut self.movement_active,
+            code,
+            state,
+        );
+        for (code, down) in transitions.into_iter().flatten().take(count) {
+            self.send_movement_key(code, down, event_loop);
         }
     }
 
     fn clear_movement_keys(&mut self, event_loop: &ActiveEventLoop) {
-        let active = std::mem::replace(&mut self.movement_active, [None, None]);
-        for code in active.into_iter().flatten() {
+        for code in clear_movement_state(&mut self.movement_pressed, &mut self.movement_active) {
             self.send_movement_key(code, false, event_loop);
         }
-        self.movement_pressed.clear();
     }
 
     fn send_movement_key(&mut self, code: KeyCode, down: bool, event_loop: &ActiveEventLoop) {
@@ -1045,15 +1021,7 @@ impl ClientApp {
             KeyCode::KeyD => 'd',
             _ => return,
         } as i32;
-        self.forward_key(
-            down,
-            key_code,
-            evdev_code,
-            unicode_char,
-            self.modifiers,
-            false,
-            event_loop,
-        );
+        self.forward_key(down, key_code, evdev_code, unicode_char, false, event_loop);
     }
 
     fn record_input_result(
@@ -1188,6 +1156,82 @@ fn movement_axis(code: KeyCode) -> Option<usize> {
     }
 }
 
+fn use_custom_movement(enabled: bool, text_box_focused: bool, code: KeyCode) -> bool {
+    enabled && !text_box_focused && movement_axis(code).is_some()
+}
+
+fn forwarded_key_event(
+    forwarded: &mut HashMap<i32, i32>,
+    down: bool,
+    key_code: i32,
+    scan_code: i32,
+    suppressed: bool,
+) -> Option<i32> {
+    if down {
+        if suppressed {
+            return None;
+        }
+        forwarded.insert(scan_code, key_code);
+        Some(key_code)
+    } else {
+        forwarded.remove(&scan_code)
+    }
+}
+
+fn take_forwarded_keys(forwarded: &mut HashMap<i32, i32>) -> Vec<(i32, i32)> {
+    std::mem::take(forwarded).into_iter().collect()
+}
+
+fn update_movement_state(
+    pressed: &mut Vec<KeyCode>,
+    active: &mut [Option<KeyCode>; 2],
+    code: KeyCode,
+    state: ElementState,
+) -> ([Option<(KeyCode, bool)>; 4], usize) {
+    if state == ElementState::Pressed {
+        // A repeat must not reorder a direction behind a newer opposite key.
+        if !pressed.contains(&code) {
+            pressed.push(code);
+        }
+    } else {
+        pressed.retain(|pressed| *pressed != code);
+    }
+
+    let mut transitions = [None; 4];
+    let mut count = 0;
+    for (axis, active_key) in active.iter_mut().enumerate() {
+        let next = pressed
+            .iter()
+            .rev()
+            .copied()
+            .find(|pressed| movement_axis(*pressed) == Some(axis));
+        if *active_key == next {
+            continue;
+        }
+        let previous = std::mem::replace(active_key, next);
+        if let Some(previous) = previous {
+            transitions[count] = Some((previous, false));
+            count += 1;
+        }
+        if let Some(next) = next {
+            transitions[count] = Some((next, true));
+            count += 1;
+        }
+    }
+    (transitions, count)
+}
+
+fn clear_movement_state(
+    pressed: &mut Vec<KeyCode>,
+    active: &mut [Option<KeyCode>; 2],
+) -> Vec<KeyCode> {
+    pressed.clear();
+    std::mem::replace(active, [None, None])
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
 fn android_key_code(code: KeyCode) -> Option<i32> {
     Some(match code {
         KeyCode::Digit0 => 7,
@@ -1294,8 +1338,8 @@ fn android_key_code(code: KeyCode) -> Option<i32> {
     })
 }
 
-// NativeGLInterface.nativePassKeyEvent expects Linux evdev codes, while the
-// GameActivity KeyEvent path above uses Android keycodes.
+// Roblox's nativePassKeyEvent takes both the Linux evdev scan code and the
+// corresponding Android keycode.
 fn evdev_key_code(code: KeyCode) -> Option<i32> {
     Some(match code {
         KeyCode::Digit1 => 2,
@@ -1391,6 +1435,16 @@ fn is_evdev_text_key(code: i32) -> bool {
 mod tests {
     use super::*;
 
+    fn movement_update(
+        pressed: &mut Vec<KeyCode>,
+        active: &mut [Option<KeyCode>; 2],
+        key: KeyCode,
+        state: ElementState,
+    ) -> Vec<(KeyCode, bool)> {
+        let (transitions, count) = update_movement_state(pressed, active, key, state);
+        transitions.into_iter().flatten().take(count).collect()
+    }
+
     #[test]
     fn test_movement_axes() {
         assert_eq!(movement_axis(KeyCode::KeyA), Some(0));
@@ -1431,6 +1485,15 @@ mod tests {
                 "Expected evdev_key_code for {key:?}"
             );
         }
+        for (key, android, evdev) in [
+            (KeyCode::KeyW, 51, 17),
+            (KeyCode::KeyA, 29, 30),
+            (KeyCode::KeyS, 47, 31),
+            (KeyCode::KeyD, 32, 32),
+        ] {
+            assert_eq!(android_key_code(key), Some(android));
+            assert_eq!(evdev_key_code(key), Some(evdev));
+        }
     }
 
     #[test]
@@ -1440,5 +1503,163 @@ mod tests {
         assert!(is_evdev_text_key(57)); // Space
         assert!(!is_evdev_text_key(1)); // Escape
         assert!(!is_evdev_text_key(59)); // F1
+    }
+
+    #[test]
+    fn movement_key_down_up_and_repeat_are_idempotent() {
+        let mut pressed = Vec::new();
+        let mut active = [None, None];
+        assert_eq!(
+            movement_update(
+                &mut pressed,
+                &mut active,
+                KeyCode::KeyW,
+                ElementState::Pressed
+            ),
+            [(KeyCode::KeyW, true)]
+        );
+        assert!(
+            movement_update(
+                &mut pressed,
+                &mut active,
+                KeyCode::KeyW,
+                ElementState::Pressed
+            )
+            .is_empty()
+        );
+        assert_eq!(
+            movement_update(
+                &mut pressed,
+                &mut active,
+                KeyCode::KeyW,
+                ElementState::Released
+            ),
+            [(KeyCode::KeyW, false)]
+        );
+        assert_eq!(
+            movement_update(
+                &mut pressed,
+                &mut active,
+                KeyCode::KeyW,
+                ElementState::Pressed
+            ),
+            [(KeyCode::KeyW, true)]
+        );
+    }
+
+    #[test]
+    fn simultaneous_movement_keys_switch_opposites_and_preserve_other_axis() {
+        let mut pressed = Vec::new();
+        let mut active = [None, None];
+        assert_eq!(
+            movement_update(
+                &mut pressed,
+                &mut active,
+                KeyCode::KeyW,
+                ElementState::Pressed
+            ),
+            [(KeyCode::KeyW, true)]
+        );
+        assert_eq!(
+            movement_update(
+                &mut pressed,
+                &mut active,
+                KeyCode::KeyD,
+                ElementState::Pressed
+            ),
+            [(KeyCode::KeyD, true)]
+        );
+        assert_eq!(
+            movement_update(
+                &mut pressed,
+                &mut active,
+                KeyCode::KeyS,
+                ElementState::Pressed
+            ),
+            [(KeyCode::KeyW, false), (KeyCode::KeyS, true)]
+        );
+        assert_eq!(
+            movement_update(
+                &mut pressed,
+                &mut active,
+                KeyCode::KeyS,
+                ElementState::Released
+            ),
+            [(KeyCode::KeyS, false), (KeyCode::KeyW, true)]
+        );
+        assert_eq!(active, [Some(KeyCode::KeyD), Some(KeyCode::KeyW)]);
+    }
+
+    #[test]
+    fn focus_loss_releases_forwarded_and_custom_keys_before_focus_returns() {
+        let mut forwarded = HashMap::new();
+        assert_eq!(
+            forwarded_key_event(&mut forwarded, true, 51, 17, false),
+            Some(51)
+        );
+        assert_eq!(
+            forwarded_key_event(&mut forwarded, true, 32, 32, false),
+            Some(32)
+        );
+        let released = take_forwarded_keys(&mut forwarded);
+        assert_eq!(released.len(), 2);
+        assert!(forwarded.is_empty());
+
+        let mut pressed = Vec::new();
+        let mut active = [None, None];
+        movement_update(
+            &mut pressed,
+            &mut active,
+            KeyCode::KeyW,
+            ElementState::Pressed,
+        );
+        movement_update(
+            &mut pressed,
+            &mut active,
+            KeyCode::KeyD,
+            ElementState::Pressed,
+        );
+        assert_eq!(
+            clear_movement_state(&mut pressed, &mut active),
+            [KeyCode::KeyD, KeyCode::KeyW]
+        );
+        assert!(pressed.is_empty());
+        assert_eq!(active, [None, None]);
+        assert_eq!(
+            movement_update(
+                &mut pressed,
+                &mut active,
+                KeyCode::KeyW,
+                ElementState::Pressed
+            ),
+            [(KeyCode::KeyW, true)]
+        );
+    }
+
+    #[test]
+    fn movement_setting_and_text_focus_select_the_correct_input_path() {
+        assert!(use_custom_movement(true, false, KeyCode::KeyW));
+        assert!(!use_custom_movement(false, false, KeyCode::KeyW));
+        assert!(!use_custom_movement(true, true, KeyCode::KeyW));
+        assert!(!use_custom_movement(true, false, KeyCode::Space));
+
+        let mut forwarded = HashMap::new();
+        assert_eq!(
+            forwarded_key_event(&mut forwarded, true, 51, 17, true),
+            None
+        );
+        assert_eq!(
+            forwarded_key_event(&mut forwarded, false, 51, 17, false),
+            None
+        );
+        assert!(forwarded.is_empty());
+        assert_eq!(
+            forwarded_key_event(&mut forwarded, true, 51, 17, false),
+            Some(51)
+        );
+        assert_eq!(
+            forwarded_key_event(&mut forwarded, false, 0, 17, false),
+            Some(51)
+        );
     }
 }

@@ -30,19 +30,6 @@ fn main() {
     std::process::exit(0);
 }
 
-/// Read a backend-selection environment flag. `true`/`1` selects the Rust
-/// backend, `false`/`0` selects the C++ one, anything else defers to the
-/// saved settings.
-fn env_backend_flag(name: &str) -> Option<bool> {
-    std::env::var(name).ok().and_then(|value| {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "true" | "1" => Some(true),
-            "false" | "0" => Some(false),
-            _ => None,
-        }
-    })
-}
-
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let raw_args = std::env::args_os().skip(1).collect::<Vec<_>>();
     let open_launcher_by_default = raw_args.is_empty();
@@ -150,26 +137,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             user_settings.log_categories.join(","),
         );
     }
-    // `USE_EXPERIMENTAL_*` selects a backend when set to true/1 or false/0;
-    // any other value leaves the saved choice in effect.
-    // Environment flags are authoritative developer overrides in both
-    // directions; the saved UI choice is the normal launch path.
-    let use_rust_jnivm = env_backend_flag("USE_EXPERIMENTAL_JNIVM").unwrap_or(user_settings.rust_jnivm);
-    unsafe {
-        std::env::set_var(
-            "USE_EXPERIMENTAL_JNIVM",
-            if use_rust_jnivm { "1" } else { "0" },
-        );
-    }
-    let use_rust_linker =
-        env_backend_flag("USE_EXPERIMENTAL_RUST_LINKER").unwrap_or(user_settings.rust_linker);
-    unsafe {
-        std::env::set_var(
-            "USE_EXPERIMENTAL_RUST_LINKER",
-            if use_rust_linker { "1" } else { "0" },
-        );
-    }
-    roblox_runtime::set_jnivm_cpp_fallback(user_settings.jnivm_cpp_fallback);
     let session_name = session_name.or_else(|| user_settings.session.clone());
     let fast_flags_path = fast_flags_path.unwrap_or_else(settings::fast_flags_path);
     if !fast_flags_path.exists() {

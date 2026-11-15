@@ -82,14 +82,13 @@ still available to open the same launcher explicitly.
 Roblox process can run at a time because the engine and JNI state are
 process-global.
 
-The General tab in `rusty-blox --settings` selects the JNI backend. C++
-libjnivm is the default. If Rust JNI is selected, the checkbox controls whether
-unhandled methods and fields can fall back to C++ libjnivm; fallback is enabled
-by default. The OpenGL ES swap interval can be set to off (0), on (1), or
-adaptive (-1, if the host driver supports it). These settings apply on the next
-launch. The General tab also has independent log category checkboxes for base,
-runtime, JNI/JNI VM, linker-sys, stubs, input, WebView, and session messages. Base
-and runtime messages are enabled by default. The WASD option
+JavaVM creation and ELF loading use the Rust implementations; some Android JNI
+class hooks still use native compatibility code. The OpenGL ES swap interval
+can be set to off (0), on (1), or adaptive (-1, if the host driver supports it).
+These settings apply on the next launch. The General tab also has independent
+log category checkboxes for base, runtime, JNI/JNI VM, linker, stubs, input,
+WebView, and session messages. Base and runtime messages are enabled by default.
+The WASD option
 lets the most recently pressed key win when opposite directions are held; when
 it is released, a still-held opposite key resumes immediately.
 
@@ -131,8 +130,6 @@ it is released, a still-held opposite key resumes immediately.
 }
 ```
 
-For development, `USE_EXPERIMENTAL_JNIVM=1` or `true` overrides the saved JNI
-backend choice and enables Rust JNI for that launch. `./dev.sh` uses that
-override and replaces `rusty-blox.log` with the combined output while also
-showing it in the terminal. Enable host-libc in Settings to use the ABI-unsafe
-diagnostic resolver for that run.
+For development, `./dev.sh` replaces `rusty-blox.log` with the combined output
+while also showing it in the terminal. Enable host-libc in Settings to use the
+ABI-unsafe diagnostic resolver for that run.

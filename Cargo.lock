@@ -2071,15 +2071,16 @@ dependencies = [
 name = "roblox-abi"
 version = "0.1.3"
 dependencies = [
- "roblox-linker-sys",
+	"roblox-audio",
  "roblox-logging",
+ "roblox-native-sys",
 ]
 
 [[package]]
 name = "roblox-android"
 version = "0.1.3"
 dependencies = [
- "roblox-linker-sys",
+ "roblox-framework",
  "roblox-logging",
  "serde_json",
  "zip",
@@ -2095,6 +2096,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "roblox-framework"
+version = "0.1.3"
+
+[[package]]
 name = "roblox-graphics-vulkan"
 version = "0.1.3"
 dependencies = [
@@ -2106,7 +2111,7 @@ dependencies = [
 name = "roblox-jni-sys"
 version = "0.1.3"
 dependencies = [
- "roblox-linker-sys",
+ "roblox-native-sys",
 ]
 
 [[package]]
@@ -2119,15 +2124,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "roblox-linker-sys"
+name = "roblox-logging"
+version = "0.1.3"
+
+[[package]]
+name = "roblox-native-sys"
 version = "0.1.3"
 dependencies = [
  "cmake",
 ]
-
-[[package]]
-name = "roblox-logging"
-version = "0.1.3"
 
 [[package]]
 name = "roblox-runtime"
@@ -2140,7 +2145,6 @@ dependencies = [
  "roblox-graphics-vulkan",
  "roblox-jni-sys",
  "roblox-linker",
- "roblox-linker-sys",
  "roblox-logging",
  "serde_json",
 ]
