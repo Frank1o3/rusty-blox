@@ -2071,7 +2071,7 @@ dependencies = [
 name = "roblox-abi"
 version = "0.1.3"
 dependencies = [
-	"roblox-audio",
+ "roblox-audio",
  "roblox-logging",
  "roblox-native-sys",
 ]
@@ -2108,9 +2108,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "roblox-jni-sys"
+name = "roblox-jni-bridge"
 version = "0.1.3"
 dependencies = [
+ "jnivm",
  "roblox-native-sys",
 ]
 
@@ -2143,7 +2144,7 @@ dependencies = [
  "roblox-android",
  "roblox-audio",
  "roblox-graphics-vulkan",
- "roblox-jni-sys",
+ "roblox-jni-bridge",
  "roblox-linker",
  "roblox-logging",
  "serde_json",
