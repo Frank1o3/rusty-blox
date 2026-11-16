@@ -1221,7 +1221,7 @@ dependencies = [
 
 [[package]]
 name = "jnivm"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "jni-sys 0.4.1",
  "libc",
@@ -1240,9 +1240,9 @@ dependencies = [
 
 [[package]]
 name = "js-sys"
-version = "0.3.107"
+version = "0.3.105"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8dc09d2154098bbf4ef54eab6b117a3c24cbbffe94046b16ee6d6d4510584d3a"
+checksum = "ce57d20d1ea864ce2ac172ab472d409214f4fd359f0b2a2775abdf522e2af99e"
 dependencies = [
  "cfg-if",
  "futures-util",
@@ -1422,9 +1422,9 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.31.3"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
+checksum = "77730ed34f01f4990cb2ea67fec715ecebc6fab9a6396cf83c5529b13f581bdc"
 dependencies = [
  "bitflags 2.13.2",
  "cfg-if",
@@ -2069,8 +2069,10 @@ dependencies = [
 
 [[package]]
 name = "roblox-abi"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
+ "libc",
+ "roblox-android",
  "roblox-audio",
  "roblox-logging",
  "roblox-native-sys",
@@ -2078,7 +2080,7 @@ dependencies = [
 
 [[package]]
 name = "roblox-android"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "roblox-logging",
  "serde_json",
@@ -2087,7 +2089,7 @@ dependencies = [
 
 [[package]]
 name = "roblox-audio"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "cpal",
  "libc",
@@ -2096,7 +2098,7 @@ dependencies = [
 
 [[package]]
 name = "roblox-graphics-vulkan"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "ash",
  "roblox-logging",
@@ -2104,16 +2106,17 @@ dependencies = [
 
 [[package]]
 name = "roblox-jni-bridge"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "jnivm",
  "roblox-android",
+ "roblox-audio",
  "roblox-native-sys",
 ]
 
 [[package]]
 name = "roblox-linker"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "libc",
  "roblox-logging",
@@ -2122,18 +2125,18 @@ dependencies = [
 
 [[package]]
 name = "roblox-logging"
-version = "0.1.3"
+version = "0.1.4"
 
 [[package]]
 name = "roblox-native-sys"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "cmake",
 ]
 
 [[package]]
 name = "roblox-runtime"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "jnivm",
  "roblox-abi",
@@ -2230,7 +2233,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "rusty-blox"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "gtk4",
  "http",
@@ -2867,11 +2870,12 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.130"
+version = "0.2.128"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0181c14ddd6c7b8b0b0132a5f1ea2f32be0d893cd3ea97b6e3b28886b8a3d1c"
+checksum = "aecb87a33d3b0c5e3b7aa46336eaf486cffafbd281b195e4c8b80d50df2351bf"
 dependencies = [
  "cfg-if",
+ "once_cell",
  "rustversion",
  "wasm-bindgen-macro",
  "wasm-bindgen-shared",
@@ -2879,20 +2883,19 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-futures"
-version = "0.4.80"
+version = "0.4.78"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e14e0327cb5368ad60ccb22d04a9827a693c95a926d8d125e9fa39e0baec501"
+checksum = "6ef4c5d3d2cdf5c54f4231181768f5510842e350db025faf1f7163b1030ed928"
 dependencies = [
  "js-sys",
- "tokio",
  "wasm-bindgen",
 ]
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.130"
+version = "0.2.128"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e931a02a39abdbf66966fc35902b5ed58344750a70885bed4ebb3d8eaf28ed9"
+checksum = "a690d511e3c1a8b3a55e33511e3c2c00c78415cd23650f32b808627f5696b9ed"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -2900,9 +2903,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.130"
+version = "0.2.128"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ca4b54280e455bd831e33a6b8e734baf432fe63fbc35c42ac14ce67a043a53a"
+checksum = "411e4887f0071ef2d2164a9d5fdf2d20efbef78fccd3a78b0c10a1dc5295e48a"
 dependencies = [
  "bumpalo",
  "proc-macro2",
@@ -2913,9 +2916,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.130"
+version = "0.2.128"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b1f9c3798725016c6ee5f2f57869ec0831e8bbc0ab0310a86e787e97f41389e"
+checksum = "81941cd78d0c92026c33e5e01312845a4cb1e9af3407f9134b100dd03144103e"
 dependencies = [
  "unicode-ident",
 ]
@@ -3031,9 +3034,9 @@ dependencies = [
 
 [[package]]
 name = "web-sys"
-version = "0.3.107"
+version = "0.3.105"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7d179596ff5ec0f6de4db64d54011bde6289cc49603d3a6e4ce3f329207ab88"
+checksum = "9fbddc4a036f00ec4f18c83445bd3115cb306a91da554919a099d9222fe4a7f8"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -3530,9 +3533,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "9.5.1"
+version = "9.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3476fd497ac8af5b1ec7b51acab7bef380f7e8dd8e0487595bafd839417a302"
+checksum = "80cc68510ea7553c30a69c732de5278e94183f68765af6c642dbccefd6ec777e"
 dependencies = [
  "constant_time_eq",
  "crc32fast",

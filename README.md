@@ -33,9 +33,10 @@ its deferred constructors, initialise JNI and GameActivity, perform the
 app-bridge startup calls, and deliver the first surface. Resize events update
 both the host EGL window and Roblox's surface callbacks. Mouse, a mapped
 keyboard subset, and committed text for focused Roblox text boxes are
-forwarded to the runtime. The runtime event pump and render context remain
-unfinished, so reaching GameActivity startup does not establish that a
-playable game appears.
+forwarded to the runtime. A manual release-build run on 2026-11-15 reached an
+experience and ran it. The equivalent debug build was reported to fail during
+game loading; that difference has not been diagnosed. Shutdown remains rough:
+the observed release process exited with SIGSEGV.
 
 Pass a base APK as the positional argument, use Sober's installed build, or run
 `--update-apk`. Use `--import-sober` to refresh an existing managed build from
@@ -82,8 +83,11 @@ still available to open the same launcher explicitly.
 Roblox process can run at a time because the engine and JNI state are
 process-global.
 
-JavaVM creation and ELF loading use the Rust implementations; some Android JNI
-class hooks still use native compatibility code. The OpenGL ES swap interval
+Engine ELF loading and the primary JavaVM/`JNI_OnLoad` path use Rust. The runtime
+also builds a companion C++ JNI VM and still owns many Android, GameActivity,
+service, and audio hooks in C++; runtime and client builds therefore still
+require the runtime's CMake/Clang toolchain. This is an active migration, not a
+Rust-only build yet. The OpenGL ES swap interval
 can be set to off (0), on (1), or adaptive (-1, if the host driver supports it).
 These settings apply on the next launch. The General tab also has independent
 log category checkboxes for base, runtime, JNI/JNI VM, linker, stubs, input,
