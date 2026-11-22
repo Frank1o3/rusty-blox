@@ -31,6 +31,7 @@ pub(crate) struct ClientApp {
     cursor: (f32, f32),
     modifiers: ModifiersState,
     cursor_locked: bool,
+    cursor_raw_motion: bool,
     cursor_rebase_pending: bool,
     pressed_mouse_buttons: HashSet<i32>,
     window_focused: bool,
@@ -88,6 +89,7 @@ impl ClientApp {
             cursor: (0.0, 0.0),
             modifiers: winit::keyboard::ModifiersState::empty(),
             cursor_locked: false,
+            cursor_raw_motion: false,
             cursor_rebase_pending: false,
             pressed_mouse_buttons: HashSet::new(),
             window_focused: false,
@@ -295,6 +297,7 @@ impl winit::application::ApplicationHandler for ClientApp {
                         let _ = window.set_cursor_grab(CursorGrabMode::None);
                     }
                     self.cursor_locked = false;
+                    self.cursor_raw_motion = false;
                     self.cursor_rebase_pending = true;
                 }
                 self.update_system_cursor_visibility();
@@ -317,7 +320,7 @@ impl winit::application::ApplicationHandler for ClientApp {
                 }
                 let delta = (next.0 - self.cursor.0, next.1 - self.cursor.1);
                 self.cursor = next;
-                if !self.cursor_locked {
+                if !self.cursor_locked || !self.cursor_raw_motion {
                     self.forward_mouse_move(next, delta, event_loop);
                 }
             }
@@ -531,7 +534,7 @@ impl winit::application::ApplicationHandler for ClientApp {
         _device_id: winit::event::DeviceId,
         event: DeviceEvent,
     ) {
-        if !self.cursor_locked {
+        if !self.cursor_locked || !self.cursor_raw_motion || !self.window_focused {
             return;
         }
         if let DeviceEvent::MouseMotion { delta } = event {
@@ -540,7 +543,14 @@ impl winit::application::ApplicationHandler for ClientApp {
             };
             let size = window.inner_size();
             let position = (size.width as f32 / 2.0, size.height as f32 / 2.0);
-            self.forward_locked_mouse_move(position, (delta.0 as f32, delta.1 as f32));
+            let scale = self
+                .surface_owner
+                .as_ref()
+                .map_or(1.0, |owner| owner.raw_mouse_scale(window.scale_factor()));
+            self.forward_locked_mouse_move(
+                position,
+                (delta.0 as f32 * scale, delta.1 as f32 * scale),
+            );
         }
     }
 }
@@ -841,23 +851,35 @@ impl ClientApp {
         }
 
         if wants_lock {
-            let result = window
-                .set_cursor_grab(CursorGrabMode::Locked)
-                .or_else(|_| window.set_cursor_grab(CursorGrabMode::Confined));
-            match result {
+            match window.set_cursor_grab(CursorGrabMode::Locked) {
                 Ok(()) => {
                     self.cursor_locked = true;
+                    self.cursor_raw_motion = true;
                     self.cursor_rebase_pending = true;
                     self.update_system_cursor_visibility();
                     eprintln!("rusty-blox: cursor captured by Roblox");
                 }
-                Err(error) => eprintln!("rusty-blox: cursor capture failed: {error}"),
+                Err(locked_error) => match window.set_cursor_grab(CursorGrabMode::Confined) {
+                    Ok(()) => {
+                        self.cursor_locked = true;
+                        self.cursor_raw_motion = false;
+                        self.cursor_rebase_pending = true;
+                        self.update_system_cursor_visibility();
+                        eprintln!(
+                            "rusty-blox: cursor confined by Roblox; using cursor-move fallback ({locked_error})"
+                        );
+                    }
+                    Err(confined_error) => eprintln!(
+                        "rusty-blox: cursor capture failed: locked: {locked_error}; confined: {confined_error}"
+                    ),
+                },
             }
         } else {
             if let Err(error) = window.set_cursor_grab(CursorGrabMode::None) {
                 eprintln!("rusty-blox: cursor release failed: {error}");
             }
             self.cursor_locked = false;
+            self.cursor_raw_motion = false;
             self.cursor_rebase_pending = true;
             self.clear_mouse_buttons(event_loop);
             self.update_system_cursor_visibility();

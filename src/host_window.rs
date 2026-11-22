@@ -82,6 +82,16 @@ impl Drop for WaylandEglWindow {
 }
 
 impl SurfaceOwner {
+    /// Winit's Wayland raw deltas use surface coordinates, while Roblox
+    /// receives Android physical-pixel coordinates. X11 raw device deltas
+    /// are already kept in device units and should not use the output scale.
+    pub(crate) fn raw_mouse_scale(&self, window_scale_factor: f64) -> f32 {
+        match self {
+            Self::Wayland { .. } => window_scale_factor as f32,
+            Self::X11 => 1.0,
+        }
+    }
+
     pub(crate) fn install(window: &Window, size: PhysicalSize<u32>) -> Result<Self, String> {
         let display = window
             .display_handle()
