@@ -51,7 +51,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                      --update-apk downloads and installs the latest Roblox Android x86-64 APK.\n\
                      --import-sober refreshes the managed APK from Sober's installed build.\n\
                      Without APK, the client uses its managed installation or imports Sober's x86-64 installation.\n\
-                     Without --session, Roblox starts without a saved login. --add-session NAME creates/selects a named login profile.\n\
+                     --session NAME selects a saved login profile; if exactly one profile has saved cookies, it is selected automatically. --add-session NAME creates/selects a named profile.\n\
                      Host libc resolution is an ABI-unsafe diagnostic option in --settings."
                 );
                 return Ok(());
@@ -137,7 +137,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             user_settings.log_categories.join(","),
         );
     }
-    let session_name = session_name.or_else(|| user_settings.session.clone());
+    let session_name = session_name
+        .or_else(|| user_settings.session.clone())
+        .or_else(|| {
+            let sessions =
+                roblox_runtime::session::Session::list(&client::sessions_root(&lock_root)).ok()?;
+            let mut saved = sessions
+                .into_iter()
+                .filter(|session| session.directory().join("roblox-cookies").is_file());
+            let only_saved_profile = saved.next()?;
+            saved
+                .next()
+                .is_none()
+                .then(|| only_saved_profile.name().to_owned())
+        });
     let fast_flags_path = fast_flags_path.unwrap_or_else(settings::fast_flags_path);
     if !fast_flags_path.exists() {
         let parent = fast_flags_path

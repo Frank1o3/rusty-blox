@@ -236,6 +236,23 @@ impl Drop for ClientApp {
         if let Some(gamepad) = &mut self.gamepad {
             gamepad.disconnect_all();
         }
+        if let Some(handle) = self.game_activity {
+            if let Err(error) = roblox_runtime::jni::game_activity::window_focus(handle, false) {
+                eprintln!("rusty-blox: GameActivity lost-focus callback failed: {error}");
+            }
+            for native in [
+                "onPauseNative",
+                "onSurfaceDestroyedNative",
+                "onStopNative",
+                "terminateNativeCode",
+            ] {
+                if let Err(error) = roblox_runtime::jni::game_activity::lifecycle(handle, native) {
+                    eprintln!(
+                        "rusty-blox: GameActivity {native} shutdown callback failed: {error}"
+                    );
+                }
+            }
+        }
         if let Some(engine) = &self.engine {
             if let Some(session_dir) = &self.session_dir {
                 if let Err(error) = roblox_runtime::session::save(engine, session_dir) {

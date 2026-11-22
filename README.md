@@ -76,12 +76,17 @@ settings, and session data intact.
 
 Open the launcher and use the Sessions tab to create a named login profile.
 Select it and use **Save & Play** to save it as the default for later launches.
-The default is “No saved session”. A new profile signs in through Roblox on
-its first launch and saves its cookies when the client exits. `--settings` is
-still available to open the same launcher explicitly.
-`--session NAME` overrides the selected profile for one launch. Only one
-Roblox process can run at a time because the engine and JNI state are
-process-global.
+A new profile signs in through Roblox on its first launch and saves its cookies
+when the client exits. `--session NAME` overrides the selected profile for one
+launch. If no profile is selected and exactly one profile has saved cookies,
+`--launch` selects it automatically. For older profiles that have cookies but
+no saved account identity, the runtime asks Roblox's authenticated-user API for
+the minimal identity needed at app startup and stores that identity alongside
+the profile. For this identity lookup, the cookie goes only to Roblox's fixed
+HTTPS endpoint and is never logged. An expired or invalid cookie falls through
+to Roblox's normal login screen. `--settings` is still available to open the
+same launcher explicitly. Only one Roblox process can run at a time because the engine and
+JNI state are process-global.
 
 Engine ELF loading and the primary JavaVM/`JNI_OnLoad` path use Rust. The runtime
 also builds a companion C++ JNI VM and still owns many Android, GameActivity,
