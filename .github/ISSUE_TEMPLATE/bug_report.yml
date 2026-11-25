@@ -1,0 +1,63 @@
+name: Bug report
+description: Report a reproducible problem in the Rusty Blox desktop client.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues first. Do not include cookies, tokens, credentials, APKs containing private data, or unredacted logs.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Release version or Git commit SHA.
+      placeholder: "0.1.2 or commit SHA"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Linux distribution, desktop session (Wayland/X11), GPU/driver, and relevant hardware.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Give the smallest reliable sequence that reproduces the problem.
+      placeholder: |
+        1. Start Rusty Blox.
+        2. Open ...
+        3. Select ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant redacted logs
+      description: Include only the lines needed to understand the problem. Remove cookies, tokens, account details, and personal paths.
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked for an existing report.
+          required: true
+        - label: I removed credentials, cookies, tokens, and personal information from the report.
+          required: true

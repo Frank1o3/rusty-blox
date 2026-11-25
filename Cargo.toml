@@ -2,7 +2,8 @@
     edition="2024"
     name="rusty-blox"
     version="0.1.2"
-    license="BSD-3-Clause"
+    description="Linux desktop bootstrapper for running the Roblox Android client through roblox-runtime"
+    license="GPL-3.0-or-later"
 
 [features]
     default=["webview"]

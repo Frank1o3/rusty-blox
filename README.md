@@ -142,3 +142,12 @@ it is released, a still-held opposite key resumes immediately.
 For development, `./dev.sh` replaces `rusty-blox.log` with the combined output
 while also showing it in the terminal. Enable host-libc in Settings to use the
 ABI-unsafe diagnostic resolver for that run.
+
+
+## License
+
+Rusty Blox is licensed under **GPL-3.0-or-later**. See [LICENSE](LICENSE) for the full license text and [docs/provenance-audit.md](docs/provenance-audit.md) for the recorded third-party code provenance and attribution notes.
+
+## Contributing and community
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md), the [Code of Conduct](CODE_OF_CONDUCT.md), and [SECURITY.md](SECURITY.md) before participating or reporting an issue.
